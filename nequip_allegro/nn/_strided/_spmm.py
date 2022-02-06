@@ -140,7 +140,6 @@ if not _USE_PYG_SPARSE:
         else:
             raise TypeError
 
-
 else:  # _USE_PYG_SPARSE
 
     from torch_sparse import SparseTensor
