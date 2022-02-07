@@ -24,7 +24,10 @@ class MakeWeightedChannels(torch.nn.Module):
         # So we need to apply the weight for the ith irrep to all DOF in that irrep
         w_index = sum(([i] * ir.dim for i, (mul, ir) in enumerate(irreps_in)), [])
         # pad to padded length
-        n_pad = int(ceil(irreps_in.dim / pad_to_alignment)) - irreps_in.dim
+        n_pad = (
+            int(ceil(irreps_in.dim / pad_to_alignment)) * pad_to_alignment
+            - irreps_in.dim
+        )
         # use the last weight, what we use doesn't matter much
         w_index += [w_index[-1]] * n_pad
         self._num_irreps = len(irreps_in)
