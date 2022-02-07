@@ -37,13 +37,13 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
 
     def __init__(
         self,
-        # general information about the system
+        # required params
         num_layers: int,
         num_types: int,
+        r_max: float,
         avg_num_neighbors: Optional[float] = None,
         # cutoffs
-        r_max: float = 6.0,
-        r_decay_factor: float = 0.8,
+        r_start_cos_ratio: float = 0.8,
         PolynomialCutoff_p: float = 6,
         per_layer_cutoffs: Optional[List[float]] = None,
         cutoff_type: str = "polynomial",
@@ -51,20 +51,20 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         field: str = AtomicDataDict.EDGE_ATTRS_KEY,
         edge_invariant_field: str = AtomicDataDict.EDGE_EMBEDDING_KEY,
         node_invariant_field: str = AtomicDataDict.NODE_ATTRS_KEY,
-        env_embed_multiplicity: int = 2,
-        embed_initial_edge: bool = False,
+        env_embed_multiplicity: int = 32,
+        embed_initial_edge: bool = True,
         linear_after_env_embed: bool = False,
         nonscalars_include_parity: bool = True,
         # MLP parameters:
         two_body_latent=ScalarMLPFunction,
         two_body_latent_kwargs={},
-        generator=ScalarMLPFunction,
-        generator_kwargs={},
+        env_embed=ScalarMLPFunction,
+        env_embed_kwargs={},
         latent=ScalarMLPFunction,
         latent_kwargs={},
-        latent_resnet: bool = False,
+        latent_resnet: bool = True,
         latent_resent_update_ratios: Optional[List[float]] = None,
-        latent_resent_update_ratios_learnable: bool = True,
+        latent_resent_update_ratios_learnable: bool = False,
         latent_out_field: Optional[str] = _keys.EDGE_FEATURES,
         # Performance parameters:
         pad_to_alignment: int = 1,
@@ -87,7 +87,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         self.node_invariant_field = node_invariant_field
         self.latent_resnet = latent_resnet
         self.env_embed_mul = env_embed_multiplicity
-        self.r_decay_factor = r_decay_factor
+        self.r_start_cos_ratio = r_start_cos_ratio
         self.polynomial_cutoff_p = PolynomialCutoff_p
         self.cutoff_type = cutoff_type
         assert cutoff_type in ("cosine", "polynomial")
@@ -115,10 +115,10 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         )
 
         latent = functools.partial(latent, **latent_kwargs)
-        generator = functools.partial(generator, **generator_kwargs)
+        env_embed = functools.partial(env_embed, **env_embed_kwargs)
 
         self.latents = torch.nn.ModuleList([])
-        self.generators = torch.nn.ModuleList([])
+        self.env_embed_mlps = torch.nn.ModuleList([])
         self.tps = torch.nn.ModuleList([])
         self.linears = torch.nn.ModuleList([])
         self.env_linears = torch.nn.ModuleList([])
@@ -289,7 +289,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             # we extract the scalars from the first irrep of the tp
             assert out_irreps[0].ir == SCALAR
 
-            # Make generator
+            # Make env embed mlp
             generate_n_weights = (
                 self._env_weighter.weight_numel
             )  # the weight for the edge embedding
@@ -340,10 +340,10 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                         mlp_output_dimension=None,
                     )
                 )
-            # the generator takes the last latent's output as input
+            # the env embed MLP takes the last latent's output as input
             # and outputs enough weights for the env embedder
-            self.generators.append(
-                generator(
+            self.env_embed_mlps.append(
+                env_embed(
                     mlp_input_dimension=self.latents[-1].out_features,
                     mlp_output_dimension=generate_n_weights,
                 )
@@ -471,7 +471,9 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         # Vectorized precompute per layer cutoffs
         if self.cutoff_type == "cosine":
             cutoff_coeffs_all = cosine_cutoff(
-                edge_length, self.per_layer_cutoffs, r_decay_factor=self.r_decay_factor
+                edge_length,
+                self.per_layer_cutoffs,
+                r_start_cos_ratio=self.r_start_cos_ratio,
             )
         elif self.cutoff_type == "polynomial":
             cutoff_coeffs_all = polynomial_cutoff(
@@ -480,8 +482,8 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
 
         # !!!! REMEMBER !!!! update final layer if update the code in main loop!!!
         # This goes through layer0, layer1, ..., layer_max-1
-        for latent, generator, env_linear, tp, linear in zip(
-            self.latents, self.generators, self.env_linears, self.tps, self.linears
+        for latent, env_embed_mlp, env_linear, tp, linear in zip(
+            self.latents, self.env_embed_mlps, self.env_linears, self.tps, self.linears
         ):
             # Determine which edges are still in play
             cutoff_coeffs = cutoff_coeffs_all[layer_index]
@@ -523,7 +525,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 latents = torch.index_copy(latents, 0, active_edges, new_latents)
 
             # From the latents, compute the weights for active edges:
-            weights = generator(latents[active_edges])
+            weights = env_embed_mlp(latents[active_edges])
             w_index: int = 0
 
             if self.embed_initial_edge and layer_index == 0:

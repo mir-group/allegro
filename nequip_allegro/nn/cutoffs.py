@@ -3,13 +3,13 @@ import torch
 
 
 @torch.jit.script
-def cosine_cutoff(x: torch.Tensor, r_max: torch.Tensor, r_decay_factor: float = 0.8):
+def cosine_cutoff(x: torch.Tensor, r_max: torch.Tensor, r_start_cos_ratio: float = 0.8):
     """A piecewise cosine cutoff starting the cosine decay at r_decay_factor*r_max.
 
     Broadcasts over r_max.
     """
     r_max, x = torch.broadcast_tensors(r_max.unsqueeze(-1), x.unsqueeze(0))
-    r_decay: torch.Tensor = r_decay_factor * r_max
+    r_decay: torch.Tensor = r_start_cos_ratio * r_max
     # for x < r_decay, clamps to 1, for x > r_max, clamps to 0
     x = x.clamp(r_decay, r_max)
     return 0.5 * (torch.cos((math.pi / (r_max - r_decay)) * (x - r_decay)) + 1.0)

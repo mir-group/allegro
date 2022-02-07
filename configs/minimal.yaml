@@ -20,7 +20,7 @@ cutoff_type: polynomial  # `cosine` or `polynomial`
 
 # radial basis
 BesselBasis_trainable: true
-PolynomialCutoff_p: 10  # sets it BOTH for the RadialBasisProjection AND the Allegro_Module
+PolynomialCutoff_p: 6  # sets it BOTH for the RadialBasisProjection AND the Allegro_Module
 normalize_basis: true
 l_max: 2
 parity: true
@@ -29,7 +29,7 @@ parity: true
 num_layers: 3
 env_embed_multiplicity: 32
 embed_initial_edge: true
-linear_after_env_embed: true
+linear_after_env_embed: false
 
 two_body_latent_mlp_latent_dimensions: [128, 256, 512, 1024]
 two_body_latent_mlp_nonlinearity: silu
@@ -41,13 +41,13 @@ latent_mlp_initialization: uniform
 latent_resnet: true
 # Ratio of the update to the old latents in the resnet update:
 # If not provided, defaults to all 1/2
-latent_resent_update_ratios: [0.1, 0.1, 0.1]
+latent_resent_update_ratios: [0.5, 0.5, 0.5]
 # Whether the ratios are trainble:
-latent_resent_update_ratios_learnable: true
+latent_resent_update_ratios_learnable: false
 
-generator_mlp_latent_dimensions: []
-generator_mlp_nonlinearity: null
-generator_mlp_initialization: uniform
+env_embed_mlp_latent_dimensions: []
+env_embed_mlp_nonlinearity: null
+env_embed_mlp_initialization: uniform
 # - end allegro layers -
 
 # Final MLP to go from Allegro latent space to edge energies:
@@ -58,7 +58,7 @@ edge_eng_mlp_initialization: uniform
 # Learnable per species pair scale to the _edgewise_ energy -
 # can be combined with a per species scale
 # As in, C-C gets one scale, C-H gets another, H-C another, etc.
-per_edge_species_scale: true
+per_edge_species_scale: false
 
 # -- data --
 dataset: npz                                                                       # type of data set, can be npz or ase
