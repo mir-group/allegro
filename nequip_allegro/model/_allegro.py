@@ -1,6 +1,8 @@
 from typing import Optional
 import logging
 
+from e3nn import o3
+
 from nequip.data import AtomicDataDict, AtomicDataset
 
 from nequip.nn import SequentialGraphNetwork, AtomwiseReduce
@@ -26,9 +28,27 @@ from nequip.model import builder_utils
 def Allegro(config, initialize: bool, dataset: Optional[AtomicDataset] = None):
     logging.debug("Building Allegro model...")
 
+    # Handle avg num neighbors auto
     builder_utils.add_avg_num_neighbors(
         config=config, initialize=initialize, dataset=dataset
     )
+
+    # Handle simple irreps
+    if "l_max" in config:
+        l_max = int(config["l_max"])
+        do_parity = bool(config["parity"])
+        irreps_edge_sh = repr(
+            o3.Irreps.spherical_harmonics(l_max, p=(-1 if do_parity else 1))
+        )
+        nonscalars_include_parity = do_parity
+        # check consistant
+        assert config.get("irreps_edge_sh", irreps_edge_sh) == irreps_edge_sh
+        assert (
+            config.get("nonscalars_include_parity", nonscalars_include_parity)
+            == nonscalars_include_parity
+        )
+        config["irreps_edge_sh"] = irreps_edge_sh
+        config["nonscalars_include_parity"] = nonscalars_include_parity
 
     layers = {
         # -- Encode --

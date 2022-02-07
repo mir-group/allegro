@@ -22,14 +22,14 @@ cutoff_type: polynomial  # `cosine` or `polynomial`
 BesselBasis_trainable: true
 PolynomialCutoff_p: 10  # sets it BOTH for the RadialBasisProjection AND the Allegro_Module
 normalize_basis: true
-irreps_edge_sh: 0e + 1o + 2e
+l_max: 2
+parity: true
 
 # Allegro layers:
 num_layers: 3
 env_embed_multiplicity: 32
 embed_initial_edge: true
 linear_after_env_embed: true
-nonscalars_include_parity: true
 
 two_body_latent_mlp_latent_dimensions: [128, 256, 512, 1024]
 two_body_latent_mlp_nonlinearity: silu
