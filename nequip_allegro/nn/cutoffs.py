@@ -30,7 +30,7 @@ def polynomial_cutoff(
     p : int
         Power used in envelope function
     """
-    assert p > 0.0
+    assert p >= 2.0
     r_max, x = torch.broadcast_tensors(r_max.unsqueeze(-1), x.unsqueeze(0))
     x = x / r_max
 
