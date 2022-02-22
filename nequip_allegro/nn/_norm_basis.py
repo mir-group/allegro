@@ -22,7 +22,7 @@ class NormalizedBasis(torch.nn.Module):
         r_max: float,
         original_basis=BesselBasis,
         original_basis_kwargs: dict = {},
-        n: int = 100_000,
+        n: int = 4000,
     ):
         super().__init__()
         self.basis = original_basis(**original_basis_kwargs)
@@ -34,8 +34,7 @@ class NormalizedBasis(torch.nn.Module):
 
         # Uniform distribution on [r_min, r_max)
         with torch.no_grad():
-            gen = torch.Generator()
-            rs = (r_max - r_min) * torch.rand(size=(n,), generator=gen) + r_min
+            rs = torch.linspace(r_min, r_max, n)
             basis_std, basis_mean = torch.std_mean(self.basis(rs), dim=0)
 
         self.register_buffer("_mean", basis_mean)
