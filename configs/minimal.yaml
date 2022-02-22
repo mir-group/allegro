@@ -14,7 +14,6 @@ model_builders:
 
 # cutoffs
 r_max: 6.0
-r_min: 0.2  # relevant only for basis normalization
 avg_num_neighbors: auto
 cutoff_type: polynomial  # `cosine` or `polynomial`
 
