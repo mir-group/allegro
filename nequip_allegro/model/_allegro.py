@@ -36,11 +36,14 @@ def Allegro(config, initialize: bool, dataset: Optional[AtomicDataset] = None):
     # Handle simple irreps
     if "l_max" in config:
         l_max = int(config["l_max"])
-        do_parity = bool(config["parity"])
+        parity_setting = config["parity"]
+        assert parity_setting in ("o3_full", "o3_restricted", "so3")
         irreps_edge_sh = repr(
-            o3.Irreps.spherical_harmonics(l_max, p=(-1 if do_parity else 1))
+            o3.Irreps.spherical_harmonics(
+                l_max, p=(1 if parity_setting == "so3" else -1)
+            )
         )
-        nonscalars_include_parity = do_parity
+        nonscalars_include_parity = parity_setting == "o3_full"
         # check consistant
         assert config.get("irreps_edge_sh", irreps_edge_sh) == irreps_edge_sh
         assert (

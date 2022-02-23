@@ -22,7 +22,7 @@ BesselBasis_trainable: true
 PolynomialCutoff_p: 6  # sets it BOTH for the RadialBasisProjection AND the Allegro_Module
 normalize_basis: true
 l_max: 2
-parity: true
+parity: o3_full  # allowed: o3_full, o3_restricted, so3
 
 # Allegro layers:
 num_layers: 3
