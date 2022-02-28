@@ -40,9 +40,9 @@ latent_mlp_initialization: uniform
 latent_resnet: true
 # Ratio of the update to the old latents in the resnet update:
 # If not provided, defaults to all 1/2
-latent_resent_update_ratios: [0.5, 0.5, 0.5]
+latent_resnet_update_ratios: [0.5, 0.5, 0.5]
 # Whether the ratios are trainble:
-latent_resent_update_ratios_learnable: false
+latent_resnet_update_ratios_learnable: false
 
 env_embed_mlp_latent_dimensions: []
 env_embed_mlp_nonlinearity: null

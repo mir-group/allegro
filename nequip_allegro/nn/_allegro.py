@@ -63,8 +63,8 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         latent=ScalarMLPFunction,
         latent_kwargs={},
         latent_resnet: bool = True,
-        latent_resent_update_ratios: Optional[List[float]] = None,
-        latent_resent_update_ratios_learnable: bool = False,
+        latent_resnet_update_ratios: Optional[List[float]] = None,
+        latent_resnet_update_ratios_learnable: bool = False,
         latent_out_field: Optional[str] = _keys.EDGE_FEATURES,
         # Performance parameters:
         pad_to_alignment: int = 1,
@@ -360,34 +360,34 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         # - end build modules -
 
         # - layer resnet update weights -
-        if latent_resent_update_ratios is None:
+        if latent_resnet_update_ratios is None:
             # We initialize to zeros, which under the sigmoid() become 0.5
             # so 1/2 * layer_1 + 1/4 * layer_2 + ...
             # note that the sigmoid of these are the factor _between_ layers
             # so the first entry is the ratio for the latent resnet of the first and second layers, etc.
             # e.g. if there are 3 layers, there are 2 ratios: l1:l2, l2:l3
-            latent_resent_update_params = torch.zeros(self.num_layers)
+            latent_resnet_update_params = torch.zeros(self.num_layers)
         else:
-            latent_resent_update_ratios = torch.as_tensor(
-                latent_resent_update_ratios, dtype=torch.get_default_dtype()
+            latent_resnet_update_ratios = torch.as_tensor(
+                latent_resnet_update_ratios, dtype=torch.get_default_dtype()
             )
-            assert latent_resent_update_ratios.min() > 0.0
-            assert latent_resent_update_ratios.min() < 1.0
-            latent_resent_update_params = torch.special.logit(
-                latent_resent_update_ratios
+            assert latent_resnet_update_ratios.min() > 0.0
+            assert latent_resnet_update_ratios.min() < 1.0
+            latent_resnet_update_params = torch.special.logit(
+                latent_resnet_update_ratios
             )
             # The sigmoid is mostly saturated at ±6, keep it in a reasonable range
-            latent_resent_update_params.clamp_(-6.0, 6.0)
-        assert latent_resent_update_params.shape == (
+            latent_resnet_update_params.clamp_(-6.0, 6.0)
+        assert latent_resnet_update_params.shape == (
             num_layers,
         ), f"There must be {num_layers} layer resnet update ratios (layer0:layer1, layer1:layer2)"
-        if latent_resent_update_ratios_learnable:
-            self._latent_resent_update_params = torch.nn.Parameter(
-                latent_resent_update_params
+        if latent_resnet_update_ratios_learnable:
+            self._latent_resnet_update_params = torch.nn.Parameter(
+                latent_resnet_update_params
             )
         else:
             self.register_buffer(
-                "_latent_resent_update_params", latent_resent_update_params
+                "_latent_resnet_update_params", latent_resnet_update_params
             )
 
         # - Per-layer cutoffs -
@@ -466,7 +466,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
 
         layer_index: int = 0
         # compute the sigmoids vectorized instead of each loop
-        layer_update_coefficients = self._latent_resent_update_params.sigmoid()
+        layer_update_coefficients = self._latent_resnet_update_params.sigmoid()
 
         # Vectorized precompute per layer cutoffs
         if self.cutoff_type == "cosine":
