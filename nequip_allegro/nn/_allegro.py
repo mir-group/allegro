@@ -88,7 +88,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         self.latent_resnet = latent_resnet
         self.env_embed_mul = env_embed_multiplicity
         self.r_start_cos_ratio = r_start_cos_ratio
-        self.polynomial_cutoff_p = PolynomialCutoff_p
+        self.polynomial_cutoff_p = float(PolynomialCutoff_p)
         self.cutoff_type = cutoff_type
         assert cutoff_type in ("cosine", "polynomial")
         self.embed_initial_edge = embed_initial_edge
@@ -479,6 +479,12 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             cutoff_coeffs_all = polynomial_cutoff(
                 edge_length, self.per_layer_cutoffs, p=self.polynomial_cutoff_p
             )
+        else:
+            # This branch is unreachable (cutoff type is checked in __init__)
+            # But TorchScript doesn't know that, so we need to make it explicitly
+            # impossible to make it past so it doesn't throw
+            # "cutoff_coeffs_all is not defined in the false branch"
+            assert False, "Invalid cutoff type"
 
         # !!!! REMEMBER !!!! update final layer if update the code in main loop!!!
         # This goes through layer0, layer1, ..., layer_max-1
