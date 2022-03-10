@@ -17,7 +17,7 @@ from test_contract import _strided_to_cat
 @pytest.mark.parametrize("mulout", [1, 2, 7])
 @pytest.mark.parametrize("pad", [1, 4])
 @pytest.mark.parametrize("shared_weights", [False, True])
-def test_like_tp(
+def test_like_linear(
     irreps_in,
     irreps_out,
     mul,
@@ -42,7 +42,6 @@ def test_like_tp(
         ),
     )
 
-    # TP
     e3nns = o3.Linear(
         irreps_in=o3.Irreps((mul, ir) for _, ir in irreps_in),
         irreps_out=o3.Irreps((mulout, ir) for _, ir in irreps_out),
@@ -55,7 +54,9 @@ def test_like_tp(
         _strided_to_cat(irreps_in, mul, args_in[0]),
         args_in[1],
     )
-    ours_out = _strided_to_cat(irreps_out, mulout, ours(*args_in))
+    ours_out_strided = ours(*args_in)
+    assert ours_out_strided.shape[-1] % pad == 0
+    ours_out = _strided_to_cat(irreps_out, mulout, ours_out_strided)
     e3nn_out = e3nns(*args_e3nn)
     assert ours_out.shape == e3nn_out.shape
     assert torch.allclose(ours_out, e3nn_out, atol=1e-6)

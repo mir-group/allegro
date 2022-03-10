@@ -142,6 +142,14 @@ def codegen_strided_linear(
     else:
         out = outs[0]
 
+    # pad output
+    padding: int = layout_out.base_dim - layout_out.base_irreps.dim
+    if padding > 0:
+        out = torch.nn.functional.pad(
+            out,
+            (0, padding),
+        )
+
     graph_out.output(out.node)
 
     # check graphs
