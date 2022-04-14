@@ -1,63 +1,45 @@
+# !! PLEASE NOTE: `minimal.yaml` is meant as a _minimal_ example of a tiny, fast
+#                 training that can be used to verify your nequip+allegro install,
+#                 the syntax of your configuration edits, etc.
+#                 These are NOT recommended hyperparameters for real applications!
+#                 Please see `example.yaml` for a reasonable starting point.
+
 # general
 root: results/aspirin
 run_name: minimal
 seed: 123456
-append: true
+dataset_seed: 123456
 
 # -- network --
 model_builders:
  - nequip_allegro.model.Allegro
- # the typical model builders from `nequip` can still be used:
  - PerSpeciesRescale
  - ForceOutput
  - RescaleEnergyEtc
 
 # cutoffs
 r_max: 6.0
-avg_num_neighbors: auto
-cutoff_type: polynomial  # `cosine` or `polynomial`
 
-# radial basis
-BesselBasis_trainable: true
-PolynomialCutoff_p: 6  # sets it BOTH for the RadialBasisProjection AND the Allegro_Module
-normalize_basis: true
-l_max: 2
-parity: o3_full  # allowed: o3_full, o3_restricted, so3
+# network symmetry
+l_max: 1
+parity: o3_full
 
-# Allegro layers:
-num_layers: 3
+# allegro layers:
+num_layers: 1
 env_embed_multiplicity: 32
-embed_initial_edge: true
-linear_after_env_embed: false
-
-two_body_latent_mlp_latent_dimensions: [128, 256, 512, 1024]
+two_body_latent_mlp_latent_dimensions: [32, 64]
 two_body_latent_mlp_nonlinearity: silu
-two_body_latent_mlp_initialization: uniform
 
-latent_mlp_latent_dimensions: [1024]
+latent_mlp_latent_dimensions: [64]
 latent_mlp_nonlinearity: silu
-latent_mlp_initialization: uniform
+
 latent_resnet: true
-# Ratio of the update to the old latents in the resnet update:
-# If not provided, defaults to all 1/2
-latent_resnet_update_ratios: [0.5, 0.5, 0.5]
-# Whether the ratios are trainble:
-latent_resnet_update_ratios_learnable: false
 
 env_embed_mlp_latent_dimensions: []
 env_embed_mlp_nonlinearity: null
-env_embed_mlp_initialization: uniform
-# - end allegro layers -
 
-# Final MLP to go from Allegro latent space to edge energies:
-edge_eng_mlp_latent_dimensions: [128]
+edge_eng_mlp_latent_dimensions: [32]
 edge_eng_mlp_nonlinearity: null
-edge_eng_mlp_initialization: uniform
-
-# Learnable per species pair scale to the _edgewise_ energy -
-# can be combined with a per species scale
-# As in, C-C gets one scale, C-H gets another, H-C another, etc.
-per_edge_species_scale: false
 
 # -- data --
 dataset: npz                                                                       # type of data set, can be npz or ase
@@ -70,6 +52,7 @@ key_mapping:
   R: pos                                                                           # raw atomic positions
 npz_fixed_field_keys:                                                              # fields that are repeated across different examples
   - atomic_numbers
+
 # A mapping of chemical species to type indexes is necessary if the dataset is provided with atomic numbers instead of type indexes.
 chemical_symbol_to_type:
   H: 0
@@ -79,10 +62,10 @@ chemical_symbol_to_type:
 # logging
 wandb: false
 wandb_project: aspirin
-verbose: debug
+verbose: info
 
 # training
-n_train: 5
+n_train: 25
 n_val: 5
 batch_size: 1
 max_epochs: 10
