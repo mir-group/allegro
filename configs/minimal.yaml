@@ -22,7 +22,6 @@ r_max: 6.0
 
 # network symmetry
 l_max: 1
-parity: o3_full
 
 # allegro layers:
 num_layers: 1
