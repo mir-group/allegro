@@ -14,13 +14,13 @@ from nequip.nn.embedding import (
     RadialBasisEdgeEncoding,
 )
 
-from nequip_allegro.nn import (
+from allegro.nn import (
     NormalizedBasis,
     EdgewiseEnergySum,
     Allegro_Module,
     ScalarMLP,
 )
-from nequip_allegro._keys import EDGE_FEATURES, EDGE_ENERGY
+from allegro._keys import EDGE_FEATURES, EDGE_ENERGY
 
 from nequip.model import builder_utils
 

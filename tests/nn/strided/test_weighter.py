@@ -5,7 +5,7 @@ import torch
 from e3nn import o3
 from e3nn.util.test import assert_auto_jitable, assert_equivariant
 
-from nequip_allegro.nn._strided import MakeWeightedChannels
+from allegro.nn._strided import MakeWeightedChannels
 from test_contract import _strided_to_cat
 
 

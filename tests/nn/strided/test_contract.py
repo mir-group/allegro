@@ -6,7 +6,7 @@ import torch
 from e3nn import o3
 from e3nn.util.test import assert_equivariant
 
-from nequip_allegro.nn._strided import Contracter
+from allegro.nn._strided import Contracter
 
 
 @pytest.mark.parametrize("irreps_in1", ["0e + 0o + 1e + 1o", "2o + 1e + 0e"])

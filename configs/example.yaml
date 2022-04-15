@@ -23,7 +23,7 @@ BesselBasis_trainable: true
 PolynomialCutoff_p: 6  # sets it BOTH for the RadialBasisProjection AND the Allegro_Module
 
 # symmetry
-l_max: 2
+l_max: 4
 parity: o3_full  # allowed: o3_full, o3_restricted, so3
 
 # Allegro layers:
@@ -70,7 +70,7 @@ chemical_symbol_to_type:
   O: 2
 
 # logging
-wandb: true
+wandb: false
 wandb_project: aspirin
 verbose: debug
 

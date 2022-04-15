@@ -4,7 +4,7 @@ import torch
 
 from e3nn import o3
 
-from nequip_allegro.nn._strided import Linear
+from allegro.nn._strided import Linear
 
 from test_contract import _strided_to_cat
 

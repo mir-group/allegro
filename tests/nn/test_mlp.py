@@ -4,7 +4,7 @@ import torch
 
 from e3nn import nn
 
-from nequip_allegro.nn import ScalarMLPFunction
+from allegro.nn import ScalarMLPFunction
 
 
 @pytest.mark.parametrize("hs", [[1, 4, 5, 8, 1], [10, 10], [13, 2, 7]])

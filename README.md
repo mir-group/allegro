@@ -2,17 +2,17 @@
 
 This package implements the Allegro E(3)-equivariant machine-learning interatomic potential (https://arxiv.org/abs/2204.05249).
 
-In particular, `nequip-allegro` implements the Allegro model as an **extension package** to the [NequIP package](https://github.com/mir-group/nequip).
+In particular, `allegro` implements the Allegro model as an **extension package** to the [NequIP package](https://github.com/mir-group/nequip).
 
 
 ## Installation
-`nequip-allegro` requires the `nequip` package and its dependencies; please see the [NequIP installation instructions](https://github.com/mir-group/nequip#installation) for details.
+`allegro` requires the `nequip` package and its dependencies; please see the [NequIP installation instructions](https://github.com/mir-group/nequip#installation) for details.
 
-Once `nequip` is installed, you can install `nequip-allegro` from source by running:
+Once `nequip` is installed, you can install `allegro` from source by running:
 ```bash
-git clone --depth 1 https://github.com/mir-group/nequip-allegro.git
-cd nequip-allegro
-pip install . 
+git clone --depth 1 https://github.com/mir-group/allegro.git
+cd allegro
+pip install .
 ```
 
 ## Usage
@@ -55,9 +55,9 @@ The implementation of Allegro is built on NequIP [1], our framework for E(3)-equ
 
 If you have questions, please don't hesitate to reach out to batzner[at]g[dot]harvard[dot]edu and albym[at]seas[dot]harvard[dot]edu.
 
-If you find a bug or have a proposal for a feature, please post it in the [Issues](https://github.com/mir-group/nequip-allegro/issues).
-If you have a question, topic, or issue that isn't obviously one of those, try our [GitHub Disucssions](https://github.com/mir-group/nequip-allegro/discussions).
+If you find a bug or have a proposal for a feature, please post it in the [Issues](https://github.com/mir-group/allegro/issues).
+If you have a question, topic, or issue that isn't obviously one of those, try our [GitHub Disucssions](https://github.com/mir-group/allegro/discussions).
 
-**If your post is related to the general NequIP framework/package, please post in the issues/discussion on [that repository](https://github.com/mir-group/nequip).** Discussions on this repository should be specific to the `nequip-allegro` package and Allegro model.
+**If your post is related to the general NequIP framework/package, please post in the issues/discussion on [that repository](https://github.com/mir-group/nequip).** Discussions on this repository should be specific to the `allegro` package and Allegro model.
 
 If you want to contribute to the code, please read [`CONTRIBUTING.md`](https://github.com/mir-group/nequip/blob/main/CONTRIBUTING.md) from the `nequip` repository; this repository follows all the same processes.

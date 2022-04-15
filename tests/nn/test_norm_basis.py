@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from nequip_allegro.nn import NormalizedBasis
+from allegro.nn import NormalizedBasis
 
 
 @pytest.mark.parametrize("r_min", [0.2, 1.0, 3.0])
