@@ -12,7 +12,7 @@ dataset_seed: 123456
 
 # -- network --
 model_builders:
- - nequip_allegro.model.Allegro
+ - allegro.model.Allegro
  - PerSpeciesRescale
  - ForceOutput
  - RescaleEnergyEtc

@@ -25,7 +25,7 @@ The key difference between using an Allegro and NequIP model is in the options u
 The key option that tells `nequip` to build an Allegro model is the `model_builders` option, which we set to:
 ```yaml
 model_builders:
- - nequip_allegro.model.Allegro
+ - allegro.model.Allegro
  # the typical model builders from `nequip` are still used to wrap the core Allegro energy model:
  - PerSpeciesRescale
  - ForceOutput
