@@ -23,7 +23,7 @@ BesselBasis_trainable: true
 PolynomialCutoff_p: 6  # sets it BOTH for the RadialBasisProjection AND the Allegro_Module
 
 # symmetry
-l_max: 4
+l_max: 2
 parity: o3_full  # allowed: o3_full, o3_restricted, so3
 
 # Allegro layers:
@@ -31,11 +31,11 @@ num_layers: 3
 env_embed_multiplicity: 32
 embed_initial_edge: true
 
-two_body_latent_mlp_latent_dimensions: [128, 256, 512, 1024]
+two_body_latent_mlp_latent_dimensions: [64, 128, 256, 512]
 two_body_latent_mlp_nonlinearity: silu
 two_body_latent_mlp_initialization: uniform
 
-latent_mlp_latent_dimensions: [1024]
+latent_mlp_latent_dimensions: [512]
 latent_mlp_nonlinearity: silu
 latent_mlp_initialization: uniform
 latent_resnet: true
