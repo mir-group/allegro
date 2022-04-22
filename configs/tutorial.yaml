@@ -1,0 +1,122 @@
+# general
+root: results/silicon-tutorial
+run_name: si
+seed: 123456
+dataset_seed: 123456
+append: true
+default_dtype: float32
+
+# -- network --
+model_builders:
+ - allegro.model.Allegro
+ # the typical model builders from `nequip` can still be used:
+ - PerSpeciesRescale
+ - ForceOutput
+ - RescaleEnergyEtc
+
+# cutoffs
+r_max: 5.0
+avg_num_neighbors: auto
+
+# radial basis
+BesselBasis_trainable: true
+PolynomialCutoff_p: 6   
+
+# symmetry
+l_max: 1
+parity: o3_full   
+
+# Allegro layers:
+num_layers: 1
+env_embed_multiplicity: 32
+embed_initial_edge: true
+
+two_body_latent_mlp_latent_dimensions: [32, 64, 128]
+two_body_latent_mlp_nonlinearity: silu
+two_body_latent_mlp_initialization: uniform
+
+latent_mlp_latent_dimensions: [128]
+latent_mlp_nonlinearity: silu
+latent_mlp_initialization: uniform
+latent_resnet: true
+
+env_embed_mlp_latent_dimensions: []
+env_embed_mlp_nonlinearity: null
+env_embed_mlp_initialization: uniform
+
+# - end allegro layers -
+
+# Final MLP to go from Allegro latent space to edge energies:
+edge_eng_mlp_latent_dimensions: [64]
+edge_eng_mlp_nonlinearity: null
+edge_eng_mlp_initialization: uniform
+
+# -- data --
+dataset: ase                                                                   
+dataset_file_name: ./Si_data/diamond_54_with_calc.xyz                      # path to data set file
+ase_args:
+  format: extxyz
+
+# A mapping of chemical species to type indexes is necessary if the dataset is provided with atomic numbers instead of type indexes.
+chemical_symbol_to_type:
+  Si: 0
+
+# logging
+wandb: false
+wandb_project: allegro-tutorial
+verbose: info
+log_batch_freq: 1000000
+
+# training
+n_train: 50
+n_val: 10
+batch_size: 1
+max_epochs: 100
+learning_rate: 0.002
+train_val_split: random
+shuffle: true
+metrics_key: validation_loss
+
+# use an exponential moving average of the weights
+use_ema: true
+ema_decay: 0.99
+ema_use_num_updates: true
+
+# loss function
+loss_coeffs:
+  forces: 1.
+  total_energy:
+    - 1.
+    - PerAtomMSELoss
+
+# optimizer
+optimizer_name: Adam
+optimizer_params:
+  amsgrad: false
+  betas: !!python/tuple
+  - 0.9
+  - 0.999
+  eps: 1.0e-08
+  weight_decay: 0.
+
+metrics_components:
+  - - forces                               # key 
+    - mae                                  # "rmse" or "mae"
+  - - forces
+    - rmse
+  - - total_energy
+    - mae    
+  - - total_energy
+    - mae
+    - PerAtom: True                        # if true, energy is normalized by the number of atoms
+
+# lr scheduler, drop lr if no improvement for 50 epochs
+lr_scheduler_name: ReduceLROnPlateau
+lr_scheduler_patience: 50
+lr_scheduler_factor: 0.5
+
+early_stopping_lower_bounds:
+  LR: 1.0e-5
+
+early_stopping_patiences:
+  validation_loss: 100
