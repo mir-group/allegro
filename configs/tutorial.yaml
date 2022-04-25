@@ -28,7 +28,7 @@ parity: o3_full
 
 # Allegro layers:
 num_layers: 1
-env_embed_multiplicity: 32
+env_embed_multiplicity: 8
 embed_initial_edge: true
 
 two_body_latent_mlp_latent_dimensions: [32, 64, 128]
@@ -47,7 +47,7 @@ env_embed_mlp_initialization: uniform
 # - end allegro layers -
 
 # Final MLP to go from Allegro latent space to edge energies:
-edge_eng_mlp_latent_dimensions: [64]
+edge_eng_mlp_latent_dimensions: [32]
 edge_eng_mlp_nonlinearity: null
 edge_eng_mlp_initialization: uniform
 
