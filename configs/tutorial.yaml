@@ -62,7 +62,7 @@ chemical_symbol_to_type:
   Si: 0
 
 # logging
-wandb: false
+wandb: true
 wandb_project: allegro-tutorial
 verbose: info
 log_batch_freq: 1000000
