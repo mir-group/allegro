@@ -53,7 +53,7 @@ edge_eng_mlp_initialization: uniform
 
 # -- data --
 dataset: ase                                                                   
-dataset_file_name: ./Si_data/diamond_54_with_calc.xyz                      # path to data set file
+dataset_file_name: ./Si_data/sitraj.xyz                      # path to data set file
 ase_args:
   format: extxyz
 
@@ -65,7 +65,7 @@ chemical_symbol_to_type:
 wandb: true
 wandb_project: allegro-tutorial
 verbose: info
-log_batch_freq: 1000000
+log_batch_freq: 10
 
 # training
 n_train: 50
