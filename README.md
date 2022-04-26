@@ -15,6 +15,9 @@ cd allegro
 pip install .
 ```
 
+## Tutorial
+The best way to learn how to use Allegro is through the [Colab Tutorial](https://bit.ly/allegro-tutorial). This will run entirely on Google's cloud virtual machine, you do not need to install or run anything locally.
+
 ## Usage
 Allegro models are trained, evaluated, deployed, etc. identically to NequIP models using the `nequip-*` commands. See the [NequIP README](https://github.com/mir-group/nequip#usage) for details.
 
