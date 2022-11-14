@@ -16,7 +16,6 @@ from ._layout import StridedLayout
 class Instruction(NamedTuple):
     i_in: int
     i_out: int
-    path_shape: tuple
 
 
 def codegen_strided_linear(
@@ -195,6 +194,10 @@ def codegen_strided_linear(
 
     graphmod_out.weight_numel = w_index
     graphmod_out.dim_in = layout_in.base_dim
+    graphmod_out.irreps_in = str(irreps_in)
+    graphmod_out.irreps_out = str(irreps_out)
+    graphmod_out.instructions = [tuple(ins) for ins in instructions]
+    graphmod_out._ins_group_irrep_slice = ins_group_irrep_slice
 
     return graphmod_out
 
@@ -220,9 +223,7 @@ def Linear(
         ]
         # note that "empty" instructions to/from empty irreps are dealt with in the codegen
 
-    instructions = [
-        Instruction(i_in=e[0], i_out=e[1], path_shape=None) for e in instructions
-    ]
+    instructions = [Instruction(i_in=e[0], i_out=e[1]) for e in instructions]
 
     mod = codegen_strided_linear(
         irreps_in,
