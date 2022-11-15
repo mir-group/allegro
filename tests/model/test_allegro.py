@@ -33,6 +33,13 @@ minimal_config3 = dict(
     num_layers=4,
     **COMMON_CONFIG,
 )
+minimal_config4 = dict(
+    l_max=3,
+    parity="o3_full",
+    num_layers=3,
+    latent_resnet=False,
+    **COMMON_CONFIG,
+)
 minimal_config6 = dict(
     l_max=4,
     parity="o3_full",
@@ -51,6 +58,7 @@ class TestAllegro(BaseEnergyModelTests):
             minimal_config1,
             minimal_config2,
             minimal_config3,
+            minimal_config4,
             minimal_config6,
         ],
         scope="class",
