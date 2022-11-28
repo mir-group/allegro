@@ -350,6 +350,14 @@ def codegen_strided_tensor_product_forward(
     graphmod_out._dim_out = layout_out.base_dim
     graphmod_out._mul_out = layout_out.mul
     graphmod_out.weight_numel = abs(prod(weight_shape))
+    graphmod_out.irreps_in1 = str(irreps_in1)
+    graphmod_out.irreps_in2 = str(irreps_in2)
+    graphmod_out.irreps_out = str(irreps_out)
+    graphmod_out.connection_mode = connection_mode
+    graphmod_out.has_weight = has_weight
+    graphmod_out.instructions = [
+        (ins.i_in1, ins.i_in2, ins.i_out) for ins in instructions
+    ]
 
     return graphmod_out
 
@@ -414,3 +422,25 @@ def Contracter(
     if sparse_mode is None:
         mod = compile(mod)
     return mod
+
+
+def contracter_paths(contracter) -> List[Tuple[o3.Irrep, o3.Irrep, o3.Irrep]]:
+    """Return the irreps combined by each path/instruction in ``contracter``.
+
+    Args:
+        contracter
+
+    Returns:
+        paths: a list of tuples of (irrep_in1, irrep_in2, irrep_out)
+    """
+    irreps_in1 = o3.Irreps(contracter.irreps_in1)
+    irreps_in2 = o3.Irreps(contracter.irreps_in2)
+    irreps_out = o3.Irreps(contracter.irreps_out)
+    return [
+        (
+            irreps_in1[tp_ins[0]].ir,
+            irreps_in2[tp_ins[1]].ir,
+            irreps_out[tp_ins[2]].ir,
+        )
+        for tp_ins in contracter.instructions
+    ]
