@@ -194,6 +194,9 @@ def codegen_strided_linear(
 
     graphmod_out.weight_numel = w_index
     graphmod_out.dim_in = layout_in.base_dim
+    graphmod_out.mul_in = layout_in.mul
+    graphmod_out.dim_out = layout_out.base_dim
+    graphmod_out.mul_out = layout_out.mul
     graphmod_out.irreps_in = str(irreps_in)
     graphmod_out.irreps_out = str(irreps_out)
     graphmod_out.instructions = [tuple(ins) for ins in instructions]
@@ -237,3 +240,89 @@ def Linear(
     if mod is None:
         raise ValueError
     return compile(mod)
+
+
+def weights_per_instruction(
+    linear,
+) -> Tuple[o3.Irreps, o3.Irreps, List[Tuple[int, int]], List[torch.Tensor]]:
+    """Extract the per-instruction weights from a `Linear`.
+
+    Args:
+        linear
+
+    Returns:
+        irreps_in
+        irreps_out
+        instructions: list of tuples (in_index, out_index)
+        weights: list of per-instruction weight tensors of shape (mul_out, mul_in)
+    """
+    irreps_in = o3.Irreps(linear.irreps_in)
+    irreps_out = o3.Irreps(linear.irreps_out)
+    instructions = linear.instructions
+
+    layout_in = StridedLayout(irreps_in)
+    layout_out = StridedLayout(irreps_out)
+
+    weights = []
+    ws = linear.w.detach()
+
+    # in the code for efficiency the weight shape is vun,
+    # where n is over instructions within an "instruction group"
+    # i.e. the closest packed weight dimension goes over multiple instructions
+    # we unpack that here
+    # adapted from _linear.py#L103-L111
+    w_index: int = 0
+    n: int
+    for ins_grp_ins in linear._ins_group_irrep_slice:
+        if ins_grp_ins is None:
+            # nothing goes to this output
+            n = 0
+        else:
+            n = 1 + ins_grp_ins[1] - ins_grp_ins[0]
+        n_weight = layout_in.mul * n * layout_out.mul
+        this_w = ws[w_index : w_index + n_weight].reshape(
+            layout_out.mul, layout_in.mul, n
+        )
+        for i in range(n):
+            weights.append(this_w[:, :, i])
+        w_index += n_weight
+
+    weights = torch.vstack([w.unsqueeze(0) for w in weights])
+    assert weights.shape == (len(instructions), layout_out.mul, layout_in.mul)
+
+    return irreps_in, irreps_out, instructions, weights
+
+
+def weights_from_per_instruction(linear, weights) -> torch.Tensor:
+    """Re-pack the per-instruction weights from a `Linear`.
+
+    Args:
+        linear
+        weights: list of per-instruction weight tensors of shape (mul_out, mul_in)
+
+    Returns:
+        weight: a flattened, packed weight tensor that can be assigned to `linear.w` or used in a state dict
+    """
+    instructions = linear.instructions
+
+    assert len(weights) == len(instructions)
+    assert frozenset(w.shape for w in weights) == {(linear.mul_out, linear.mul_in)}
+
+    # need to group them back into instruction groups
+    to_cat = []
+    for ins_grp_ins in linear._ins_group_irrep_slice:
+        if ins_grp_ins is None:
+            # Nothing goes to this output
+            continue
+        to_cat.append(
+            torch.cat(
+                [
+                    w.unsqueeze(-1)
+                    for w, ins in zip(weights, instructions)
+                    if ins[0] in range(ins_grp_ins[0], ins_grp_ins[1] + 1)
+                ],
+                dim=-1,
+            )
+        )
+
+    return torch.cat([w.view(-1) for w in to_cat])

@@ -5,6 +5,10 @@ import torch
 from e3nn import o3
 
 from allegro.nn._strided import Linear
+from allegro.nn._strided._linear import (
+    weights_from_per_instruction,
+    weights_per_instruction,
+)
 
 from test_contract import _strided_to_cat
 
@@ -60,3 +64,30 @@ def test_like_linear(
     e3nn_out = e3nns(*args_e3nn)
     assert ours_out.shape == e3nn_out.shape
     assert torch.allclose(ours_out, e3nn_out, atol=1e-6)
+
+
+@pytest.mark.parametrize(
+    "irreps_in", ["0e", "0e + 0o + 1e + 1o", "0e + 0e + 0e + 1o + 1o + 2e"]
+)
+@pytest.mark.parametrize("irreps_out", ["0e", "0e + 0o + 1e + 1o", "0e + 1o + 2e"])
+@pytest.mark.parametrize("mul", [1, 2, 7])
+@pytest.mark.parametrize("mulout", [1, 2, 7])
+def test_weight_packing(
+    irreps_in,
+    irreps_out,
+    mul,
+    mulout,
+):
+    irreps_in = o3.Irreps(irreps_in)
+    irreps_out = o3.Irreps(irreps_out)
+    linear = Linear(
+        irreps_in=o3.Irreps((mul, ir) for _, ir in irreps_in),
+        irreps_out=o3.Irreps((mulout, ir) for _, ir in irreps_out),
+        internal_weights=True,
+        shared_weights=True,
+    )
+
+    _, _, _, weights_unpacked = weights_per_instruction(linear)
+    assert frozenset(w.shape for w in weights_unpacked) == {(mulout, mul)}
+    weights_repacked = weights_from_per_instruction(linear, weights_unpacked)
+    assert torch.equal(linear.w, weights_repacked)
