@@ -334,7 +334,12 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                                 # the embedded latent invariants from the previous layer(s)
                                 self.latents[-1].out_features
                                 # and the invariants extracted from the last layer's TP:
-                                + env_embed_multiplicity * n_scalar_outs
+                                # above, we already appended the n_scalar_out for the new TP for
+                                # the layer we are building right now. So, we need -2
+                                # to get the n_scalar_out for the previous TP, which are what we are actually integrating:
+                                # in forward(), the `latent` is called _first_ before the TP
+                                # of this layer we are building.
+                                + env_embed_multiplicity * self._n_scalar_outs[-2]
                             )
                         ),
                         mlp_output_dimension=None,
@@ -354,7 +359,9 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         # thus we only need the latent:
         self.final_latent = latent(
             mlp_input_dimension=self.latents[-1].out_features
-            + env_embed_multiplicity * n_scalar_outs,
+            # here we use self._n_scalar_outs[-1] since we haven't appended anything to it
+            # so it is still the correct n_scalar_outs for the previous (and last) TP
+            + env_embed_multiplicity * self._n_scalar_outs[-1],
             mlp_output_dimension=None,
         )
         # - end build modules -
