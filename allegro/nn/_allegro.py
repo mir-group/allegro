@@ -28,7 +28,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
     env_embed_mul: int
     weight_numel: int
     latent_resnet: bool
-    embed_initial_edge: bool
 
     # internal values
     _env_builder_w_index: List[int]
@@ -52,7 +51,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         edge_invariant_field: str = AtomicDataDict.EDGE_EMBEDDING_KEY,
         node_invariant_field: str = AtomicDataDict.NODE_ATTRS_KEY,
         env_embed_multiplicity: int = 32,
-        embed_initial_edge: bool = True,
         linear_after_env_embed: bool = False,
         nonscalars_include_parity: bool = True,
         # MLP parameters:
@@ -91,7 +89,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         self.polynomial_cutoff_p = float(PolynomialCutoff_p)
         self.cutoff_type = cutoff_type
         assert cutoff_type in ("cosine", "polynomial")
-        self.embed_initial_edge = embed_initial_edge
         self.avg_num_neighbors = avg_num_neighbors
         self.linear_after_env_embed = linear_after_env_embed
         self.num_types = num_types
@@ -136,12 +133,9 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         ) - env_embed_irreps.dim
         self.register_buffer("_zero", torch.zeros(1, 1))
 
-        # Initially, we have the B(r)Y(\vec{r})-projection of the edges
-        # (possibly embedded)
-        if self.embed_initial_edge:
-            arg_irreps = env_embed_irreps
-        else:
-            arg_irreps = input_irreps
+        # Initially, we have the B(r)Y(\vec{r})-projection of the edges,
+        # embeded by a Linear.
+        arg_irreps = env_embed_irreps
 
         # - begin irreps -
         # start to build up the irreps for the iterated TPs
@@ -252,17 +246,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             assert all(ir == SCALAR for _, ir in full_out_irreps[:n_scalar_outs])
             tp = Contracter(
                 irreps_in1=o3.Irreps(
-                    [
-                        (
-                            (
-                                env_embed_multiplicity
-                                if layer_idx > 0 or self.embed_initial_edge
-                                else 1
-                            ),
-                            ir,
-                        )
-                        for _, ir in arg_irreps
-                    ]
+                    [(env_embed_multiplicity, ir) for _, ir in arg_irreps]
                 ),
                 irreps_in2=o3.Irreps(
                     [(env_embed_multiplicity, ir) for _, ir in env_embed_irreps]
@@ -271,15 +255,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                     [(env_embed_multiplicity, ir) for _, ir in full_out_irreps]
                 ),
                 instructions=instr,
-                # For the first layer, we have the unprocessed edges
-                # coming in from the input if `not self.embed_initial_edge`.
-                # These don't match the embedding in mul, so we have
-                # to use uvv --- since the input edges should be mul
-                # of one in normal circumstances, this is still plenty fast.
-                # For this reason it also doesn't increase the number of weights.
-                connection_mode=(
-                    "uuu" if layer_idx > 0 or self.embed_initial_edge else "uvv"
-                ),
+                connection_mode="uuu",
                 shared_weights=False,
                 has_weight=False,
                 pad_to_alignment=pad_to_alignment,
@@ -293,7 +269,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             generate_n_weights = (
                 self._env_weighter.weight_numel
             )  # the weight for the edge embedding
-            if layer_idx == 0 and self.embed_initial_edge:
+            if layer_idx == 0:
                 # also need weights to embed the edge itself
                 # this is because the 2 body latent is mixed in with the first layer
                 # in terms of code
@@ -535,7 +511,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             weights = env_embed_mlp(latents[active_edges])
             w_index: int = 0
 
-            if self.embed_initial_edge and layer_index == 0:
+            if layer_index == 0:
                 # embed initial edge
                 env_w = weights.narrow(-1, w_index, self._env_weighter.weight_numel)
                 w_index += self._env_weighter.weight_numel
