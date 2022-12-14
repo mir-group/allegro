@@ -25,7 +25,7 @@ l_max: 1
 parity: o3_full  
 
 # allegro layers:
-num_layers: 1
+num_layers: 2
 env_embed_multiplicity: 32
 two_body_latent_mlp_latent_dimensions: [32, 64]
 two_body_latent_mlp_nonlinearity: silu
@@ -34,6 +34,8 @@ latent_mlp_latent_dimensions: [64]
 latent_mlp_nonlinearity: silu
 
 latent_resnet: true
+latent_resnet_coefficients: [1.0, 1.0, 1.0]
+latent_resnet_coefficients_learnable: false
 
 env_embed_mlp_latent_dimensions: []
 env_embed_mlp_nonlinearity: null

@@ -63,8 +63,8 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         latent=ScalarMLPFunction,
         latent_kwargs={},
         latent_resnet: bool = True,
-        latent_resnet_update_ratios: Optional[List[float]] = None,
-        latent_resnet_update_ratios_learnable: bool = False,
+        latent_resnet_coefficients: Optional[List[float]] = None,
+        latent_resnet_coefficients_learnable: bool = False,
         latent_out_field: Optional[str] = _keys.EDGE_FEATURES,
         # Performance parameters:
         pad_to_alignment: int = 1,
@@ -367,34 +367,29 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         # - end build modules -
 
         # - layer resnet update weights -
-        if latent_resnet_update_ratios is None:
-            # We initialize to zeros, which under the sigmoid() become 0.5
-            # so 1/2 * layer_1 + 1/4 * layer_2 + ...
-            # note that the sigmoid of these are the factor _between_ layers
-            # so the first entry is the ratio for the latent resnet of the first and second layers, etc.
-            # e.g. if there are 3 layers, there are 2 ratios: l1:l2, l2:l3
-            latent_resnet_update_params = torch.zeros(self.num_layers)
+        if latent_resnet_coefficients is None:
+            # We initialize to zeros, which under exp() all go to ones
+            latent_resnet_coefficients_params = torch.zeros(num_layers + 1)
         else:
-            latent_resnet_update_ratios = torch.as_tensor(
-                latent_resnet_update_ratios, dtype=torch.get_default_dtype()
+            latent_resnet_coefficients = torch.as_tensor(
+                latent_resnet_coefficients, dtype=torch.get_default_dtype()
             )
-            assert latent_resnet_update_ratios.min() > 0.0
-            assert latent_resnet_update_ratios.min() < 1.0
-            latent_resnet_update_params = torch.special.logit(
-                latent_resnet_update_ratios
-            )
-            # The sigmoid is mostly saturated at ±6, keep it in a reasonable range
-            latent_resnet_update_params.clamp_(-6.0, 6.0)
-        assert latent_resnet_update_params.shape == (
-            num_layers,
-        ), f"There must be {num_layers} layer resnet update ratios (layer0:layer1, layer1:layer2)"
-        if latent_resnet_update_ratios_learnable:
-            self._latent_resnet_update_params = torch.nn.Parameter(
-                latent_resnet_update_params
+            assert latent_resnet_coefficients.min() > 0.0
+            # dividing out a common factor doesn't affect the final normalized coefficients
+            # and it keeps the numerics / gradients saner
+            latent_resnet_coefficients /= latent_resnet_coefficients.min()
+            # invert desired coefficients into params:
+            latent_resnet_coefficients_params = torch.log(latent_resnet_coefficients)
+        assert latent_resnet_coefficients_params.shape == (
+            num_layers + 1,
+        ), f"There must be {num_layers + 1} layer resnet update ratios, one for the two-body latent and each following layer"
+        if latent_resnet_coefficients_learnable:
+            self._latent_resnet_coefficients_params = torch.nn.Parameter(
+                latent_resnet_coefficients_params
             )
         else:
             self.register_buffer(
-                "_latent_resnet_update_params", latent_resnet_update_params
+                "_latent_resnet_coefficients_params", latent_resnet_coefficients_params
             )
 
         # - Per-layer cutoffs -
@@ -472,8 +467,9 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         features = edge_attr
 
         layer_index: int = 0
-        # compute the sigmoids vectorized instead of each loop
-        layer_update_coefficients = self._latent_resnet_update_params.sigmoid()
+        # precompute the exp() and cumsum for each layer
+        latent_coefficients = self._latent_resnet_coefficients_params.exp()
+        latent_coefficients_cumsum = latent_coefficients.cumsum(dim=0)
 
         # Vectorized precompute per layer cutoffs
         if self.cutoff_type == "cosine":
@@ -509,20 +505,18 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             new_latents = cutoff_coeffs[active_edges].unsqueeze(-1) * new_latents
 
             if self.latent_resnet and layer_index > 0:
-                this_layer_update_coeff = layer_update_coefficients[layer_index - 1]
-                # At init, we assume new and old to be approximately uncorrelated
-                # Thus their variances add
-                # we always want the latent space to be normalized to variance = 1.0,
-                # because it is critical for learnability. Still, we want to preserve
-                # the _relative_ magnitudes of the current latent and the residual update
-                # to be controled by `this_layer_update_coeff`
-                # Solving the simple system for the two coefficients:
-                #   a^2 + b^2 = 1  (variances add)   &    a * this_layer_update_coeff = b
-                # gives
-                #   a = 1 / sqrt(1 + this_layer_update_coeff^2)  &  b = this_layer_update_coeff / sqrt(1 + this_layer_update_coeff^2)
-                # rsqrt is reciprocal sqrt
-                coefficient_old = torch.rsqrt(this_layer_update_coeff.square() + 1)
-                coefficient_new = this_layer_update_coeff * coefficient_old
+                # previous normalization denominator / new normalization denominator
+                # ^ cancels the old normalization, and ^ applies new
+                # sqrt accounts for stdev vs variance
+                coefficient_old = (
+                    latent_coefficients_cumsum[layer_index - 1]
+                    / latent_coefficients_cumsum[layer_index]
+                ).sqrt()
+                # just take the coefficient for the new latents
+                coefficient_new = (
+                    latent_coefficients[layer_index]
+                    / latent_coefficients_cumsum[layer_index]
+                ).sqrt()
                 # Residual update
                 # Note that it only runs when there are latents to resnet with, so not at the first layer
                 # index_add adds only to the edges for which we have something to contribute
@@ -618,9 +612,14 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         )
         new_latents = cutoff_coeffs[active_edges].unsqueeze(-1) * new_latents
         if self.latent_resnet:
-            this_layer_update_coeff = layer_update_coefficients[layer_index - 1]
-            coefficient_old = torch.rsqrt(this_layer_update_coeff.square() + 1)
-            coefficient_new = this_layer_update_coeff * coefficient_old
+            coefficient_old = (
+                latent_coefficients_cumsum[layer_index - 1]
+                / latent_coefficients_cumsum[layer_index]
+            ).sqrt()
+            coefficient_new = (
+                latent_coefficients[layer_index]
+                / latent_coefficients_cumsum[layer_index]
+            ).sqrt()
             latents = torch.index_add(
                 coefficient_old * latents,
                 0,
