@@ -11,6 +11,9 @@ Most recent change on the bottom.
 ### Changed
 - Resnet normalization scheme
 
+### Removed
+- Hyperparameter `embed_initial_edge`
+
 ## [Unreleased]
 
 ### Fixed
