@@ -39,6 +39,8 @@ r_max: 6.0
 
 # average number of neighbors in an environment is used to normalize the sum, auto precomputed it automitcally 
 avg_num_neighbors: auto
+# OR
+# env_embed_softsquare: true
 
 # radial basis
 # set true to train the bessel roots

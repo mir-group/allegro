@@ -28,6 +28,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
     env_embed_mul: int
     weight_numel: int
     latent_resnet: bool
+    env_embed_softsquare: bool
 
     # internal values
     _env_builder_w_index: List[int]
@@ -51,6 +52,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         env_embed_multiplicity: int = 32,
         linear_after_env_embed: bool = False,
         nonscalars_include_parity: bool = True,
+        env_embed_softsquare: bool = False,
         # MLP parameters:
         two_body_latent=ScalarMLPFunction,
         two_body_latent_kwargs={},
@@ -86,6 +88,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         self.polynomial_cutoff_p = float(PolynomialCutoff_p)
         self.avg_num_neighbors = avg_num_neighbors
         self.linear_after_env_embed = linear_after_env_embed
+        self.env_embed_softsquare = env_embed_softsquare
         self.num_types = num_types
 
         self.register_buffer("r_max", torch.as_tensor(float(r_max)))
@@ -105,7 +108,9 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         self.register_buffer(
             "env_sum_normalizations",
             # dividing by sqrt(N)
-            torch.as_tensor([avg_num_neighbors] * num_layers).rsqrt(),
+            torch.Tensor()
+            if self.env_embed_softsquare
+            else torch.as_tensor([avg_num_neighbors] * num_layers).rsqrt(),
         )
 
         latent = functools.partial(latent, **latent_kwargs)
@@ -476,6 +481,10 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             env_w = weights.narrow(-1, w_index, self._env_weighter.weight_numel)
             w_index += self._env_weighter.weight_numel
 
+            if self.env_embed_softsquare:
+                env_w = env_w.square()
+                env_w = env_w / scatter(env_w, edge_center, dim=0)[edge_center]
+
             # Build the local environments
             # This local environment should only be a sum over neighbors
             # who are within the cutoff of the _current_ layer
@@ -487,16 +496,17 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 edge_center,
                 dim=0,
             )
-            if self.env_sum_normalizations.ndim < 2:
-                # it's a scalar per layer
-                norm_const = self.env_sum_normalizations[layer_index]
-            else:
-                # it's per type
-                # get shape [N_atom, 1] for broadcasting
-                norm_const = self.env_sum_normalizations[
-                    layer_index, data[AtomicDataDict.ATOM_TYPE_KEY]
-                ].unsqueeze(-1)
-            local_env_per_edge = local_env_per_edge * norm_const
+            if not self.env_embed_softsquare:
+                if self.env_sum_normalizations.ndim < 2:
+                    # it's a scalar per layer
+                    env_sum_norm_factor = self.env_sum_normalizations[layer_index]
+                else:
+                    # it's per type
+                    # get shape [N_atom, 1] for broadcasting
+                    env_sum_norm_factor = self.env_sum_normalizations[
+                        layer_index, data[AtomicDataDict.ATOM_TYPE_KEY]
+                    ].unsqueeze(-1)
+                local_env_per_edge = local_env_per_edge * env_sum_norm_factor
             local_env_per_edge = env_linear(local_env_per_edge)
             # Copy to get per-edge
             # Large allocation, but no better way to do this:
