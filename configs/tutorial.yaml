@@ -4,7 +4,6 @@ run_name: si
 seed: 123456
 dataset_seed: 123456
 append: true
-default_dtype: float32
 
 # -- network --
 model_builders:
