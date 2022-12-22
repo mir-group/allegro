@@ -483,7 +483,12 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
 
             if self.env_embed_softsquare:
                 env_w = env_w.square()
-                env_w = env_w / scatter(env_w, edge_center, dim=0)[edge_center]
+                # small eps=1e-12 here is for stability
+                # it also resolves the case where everything is zero, avoiding div by zero
+                # https://pytorch-scatter.readthedocs.io/en/1.4.0/_modules/torch_scatter/composite/softmax.html#scatter_softmax
+                env_w = env_w / (
+                    scatter(env_w, edge_center, dim=0)[edge_center] + 1e-12
+                )
 
             # Build the local environments
             # This local environment should only be a sum over neighbors
