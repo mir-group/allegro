@@ -12,7 +12,7 @@ Most recent change on the bottom.
 - Resnet normalization scheme
 
 ### Removed
-- Hyperparameter `embed_initial_edge`
+- Hyperparameter `embed_initial_edge`, `cutoff_type`, `per_layer_cutoffs`
 
 ## [Unreleased]
 
