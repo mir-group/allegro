@@ -15,7 +15,7 @@ from nequip.utils.tp_utils import tp_path_exists
 from ._fc import ScalarMLPFunction
 from .. import _keys
 from ._strided import Contracter, MakeWeightedChannels, Linear
-from .cutoffs import cosine_cutoff, polynomial_cutoff
+from .cutoffs import polynomial_cutoff
 
 
 @compile_mode("script")
@@ -33,6 +33,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
     _env_builder_w_index: List[int]
     _env_builder_n_irreps: int
     _input_pad: int
+    _all_cutoffs_not_r_max: bool
 
     def __init__(
         self,
@@ -42,10 +43,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         r_max: float,
         avg_num_neighbors: Optional[float] = None,
         # cutoffs
-        r_start_cos_ratio: float = 0.8,
         PolynomialCutoff_p: float = 6,
-        per_layer_cutoffs: Optional[List[float]] = None,
-        cutoff_type: str = "polynomial",
         # general hyperparameters:
         field: str = AtomicDataDict.EDGE_ATTRS_KEY,
         edge_invariant_field: str = AtomicDataDict.EDGE_EMBEDDING_KEY,
@@ -85,13 +83,12 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         self.node_invariant_field = node_invariant_field
         self.latent_resnet = latent_resnet
         self.env_embed_mul = env_embed_multiplicity
-        self.r_start_cos_ratio = r_start_cos_ratio
         self.polynomial_cutoff_p = float(PolynomialCutoff_p)
-        self.cutoff_type = cutoff_type
-        assert cutoff_type in ("cosine", "polynomial")
         self.avg_num_neighbors = avg_num_neighbors
         self.linear_after_env_embed = linear_after_env_embed
         self.num_types = num_types
+
+        self.register_buffer("r_max", torch.as_tensor(float(r_max)))
 
         # set up irreps
         self._init_irreps(
@@ -368,20 +365,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 "_latent_resnet_coefficients_params", latent_resnet_coefficients_params
             )
 
-        # - Per-layer cutoffs -
-        if per_layer_cutoffs is None:
-            per_layer_cutoffs = torch.full((num_layers + 1,), r_max)
-        self.register_buffer("per_layer_cutoffs", torch.as_tensor(per_layer_cutoffs))
-        assert torch.all(self.per_layer_cutoffs <= r_max)
-        assert self.per_layer_cutoffs.shape == (
-            num_layers + 1,
-        ), "Must be one per-layer cutoff for layer 0 and every layer for a total of {num_layers} cutoffs (the first applies to the two body latent, which is 'layer 0')"
-        assert (
-            self.per_layer_cutoffs[1:] <= self.per_layer_cutoffs[:-1]
-        ).all(), "Per-layer cutoffs must be equal or decreasing"
-        assert (
-            self.per_layer_cutoffs.min() > 0
-        ), "Per-layer cutoffs must be >0. To remove higher layers entirely, lower `num_layers`."
         self._latent_dim = self.final_latent.out_features
         self.register_buffer("_zero", torch.as_tensor(0.0))
 
@@ -414,23 +397,13 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             )
 
         edge_length = data[AtomicDataDict.EDGE_LENGTH_KEY]
-        num_edges: int = len(edge_attr)
         edge_invariants = data[self.edge_invariant_field]
         node_invariants = data[self.node_invariant_field]
         # pre-declare variables as Tensors for TorchScript
         scalars = self._zero
-        coefficient_old = scalars
-        coefficient_new = scalars
-        # Initialize state
-        latents = torch.zeros(
-            (num_edges, self._latent_dim),
-            dtype=edge_attr.dtype,
-            device=edge_attr.device,
-        )
-        active_edges = torch.arange(
-            num_edges,
-            device=edge_attr.device,
-        )
+        coefficient_old = self._zero
+        coefficient_new = self._zero
+        latents = self._zero
 
         # For the first layer, we use the input invariants:
         # The center and neighbor invariants and edge invariants
@@ -448,37 +421,19 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         latent_coefficients_cumsum = latent_coefficients.cumsum(dim=0)
 
         # Vectorized precompute per layer cutoffs
-        if self.cutoff_type == "cosine":
-            cutoff_coeffs_all = cosine_cutoff(
-                edge_length,
-                self.per_layer_cutoffs,
-                r_start_cos_ratio=self.r_start_cos_ratio,
-            )
-        elif self.cutoff_type == "polynomial":
-            cutoff_coeffs_all = polynomial_cutoff(
-                edge_length, self.per_layer_cutoffs, p=self.polynomial_cutoff_p
-            )
-        else:
-            # This branch is unreachable (cutoff type is checked in __init__)
-            # But TorchScript doesn't know that, so we need to make it explicitly
-            # impossible to make it past so it doesn't throw
-            # "cutoff_coeffs_all is not defined in the false branch"
-            assert False, "Invalid cutoff type"
+        cutoff_coeffs = polynomial_cutoff(
+            edge_length,
+            r_max=self.r_max,
+            p=self.polynomial_cutoff_p,
+        )[0]
 
         # !!!! REMEMBER !!!! update final layer if update the code in main loop!!!
         # This goes through layer0, layer1, ..., layer_max-1
         for latent, env_embed_mlp, env_linear, tp, linear in zip(
             self.latents, self.env_embed_mlps, self.env_linears, self.tps, self.linears
         ):
-            # Determine which edges are still in play
-            cutoff_coeffs = cutoff_coeffs_all[layer_index]
-            prev_mask = cutoff_coeffs[active_edges] > 0
-            active_edges = (cutoff_coeffs > 0).nonzero().squeeze(-1)
-
             # Compute latents
-            new_latents = latent(torch.cat(latent_inputs_to_cat, dim=-1)[prev_mask])
-            # Apply cutoff, which propagates through to everything else
-            new_latents = cutoff_coeffs[active_edges].unsqueeze(-1) * new_latents
+            new_latents = latent(torch.cat(latent_inputs_to_cat, dim=-1))
 
             if self.latent_resnet and layer_index > 0:
                 # previous normalization denominator / new normalization denominator
@@ -494,33 +449,28 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                     / latent_coefficients_cumsum[layer_index]
                 ).sqrt()
                 # Residual update
-                # Note that it only runs when there are latents to resnet with, so not at the first layer
-                # index_add adds only to the edges for which we have something to contribute
-                latents = torch.index_add(
-                    coefficient_old * latents,
-                    0,
-                    active_edges,
-                    coefficient_new * new_latents,
-                )
+                # Note that it only runs when there are latents to resnet with
+                latents = coefficient_old * latents + coefficient_new * new_latents
             else:
                 # Normal (non-residual) update
-                # index_copy replaces, unlike index_add
-                latents = torch.index_copy(latents, 0, active_edges, new_latents)
+                if layer_index == 0:
+                    # Applying the cutoff here to the output of the two-body latent
+                    # carries through to:
+                    # 1) the initial features in the first layer via env embed weights
+                    # 2) the contributions to the embeded environment for the first layer via same
+                    # 3) future latents inductively
+                    new_latents = cutoff_coeffs.unsqueeze(-1) * new_latents
+                latents = new_latents
 
             # From the latents, compute the weights for active edges:
-            weights = env_embed_mlp(latents[active_edges])
+            weights = env_embed_mlp(latents)
             w_index: int = 0
 
             if layer_index == 0:
                 # embed initial edge
                 env_w = weights.narrow(-1, w_index, self._env_weighter.weight_numel)
                 w_index += self._env_weighter.weight_numel
-                features = self._env_weighter(
-                    features[prev_mask], env_w
-                )  # features is edge_attr
-            else:
-                # just take the previous features that we still need
-                features = features[prev_mask]
+                features = self._env_weighter(features, env_w)  # features is edge_attr
 
             # Extract weights for the environment builder
             env_w = weights.narrow(-1, w_index, self._env_weighter.weight_numel)
@@ -533,8 +483,8 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             # have weights for (env_w) anyway.
             # So we mask out the edges in the sum:
             local_env_per_edge = scatter(
-                self._env_weighter(edge_attr[active_edges], env_w),
-                edge_center[active_edges],
+                self._env_weighter(edge_attr, env_w),
+                edge_center,
                 dim=0,
             )
             if self.env_sum_normalizations.ndim < 2:
@@ -550,7 +500,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             local_env_per_edge = env_linear(local_env_per_edge)
             # Copy to get per-edge
             # Large allocation, but no better way to do this:
-            local_env_per_edge = local_env_per_edge[edge_center[active_edges]]
+            local_env_per_edge = local_env_per_edge[edge_center]
 
             # Now do the TP
             # recursively tp current features with the environment embeddings
@@ -569,7 +519,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             # For layer2+, use the previous latents and scalars
             # This makes it deep
             latent_inputs_to_cat = [
-                latents[active_edges],
+                latents,
                 scalars,
             ]
 
@@ -580,13 +530,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         # due to TorchScript limitations, we have to
         # copy and repeat the code here --- no way to
         # escape the final iteration of the loop early
-        cutoff_coeffs = cutoff_coeffs_all[layer_index]
-        prev_mask = cutoff_coeffs[active_edges] > 0
-        active_edges = (cutoff_coeffs > 0).nonzero().squeeze(-1)
-        new_latents = self.final_latent(
-            torch.cat(latent_inputs_to_cat, dim=-1)[prev_mask]
-        )
-        new_latents = cutoff_coeffs[active_edges].unsqueeze(-1) * new_latents
+        new_latents = self.final_latent(torch.cat(latent_inputs_to_cat, dim=-1))
         if self.latent_resnet:
             coefficient_old = (
                 latent_coefficients_cumsum[layer_index - 1]
@@ -596,14 +540,9 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 latent_coefficients[layer_index]
                 / latent_coefficients_cumsum[layer_index]
             ).sqrt()
-            latents = torch.index_add(
-                coefficient_old * latents,
-                0,
-                active_edges,
-                coefficient_new * new_latents,
-            )
+            latents = coefficient_old * latents + coefficient_new * new_latents
         else:
-            latents = torch.index_copy(latents, 0, active_edges, new_latents)
+            latents = new_latents
         # - end final layer -
 
         # final latents
