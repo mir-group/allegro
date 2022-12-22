@@ -22,9 +22,6 @@ dataset_seed: 123456
 # set true if a restarted run should append to the previous log file
 append: true
 
-# type of float to use, e.g. float32 and float64
-default_dtype: float32
-
 # -- network --
 # tell nequip which modules to build
 model_builders:
@@ -39,7 +36,7 @@ r_max: 6.0
 
 # average number of neighbors in an environment is used to normalize the sum, auto precomputed it automitcally 
 avg_num_neighbors: auto
-# OR
+# to normalize the sum, one can also choose
 # env_embed_softsquare: true
 
 # radial basis
