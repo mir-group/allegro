@@ -109,10 +109,11 @@ class EdgewiseEnergySum(GraphModuleMixin, torch.nn.Module):
                 center_species, neighbor_species
             ].unsqueeze(-1)
 
-        atom_eng = scatter(edge_eng, edge_center, dim=0, dim_size=len(species))
+        # for numerics it seems safer to make these smaller first before accumulating
         factor: Optional[float] = self._factor  # torchscript hack for typing
         if factor is not None:
-            atom_eng = atom_eng * factor
+            edge_eng = edge_eng * factor
+        atom_eng = scatter(edge_eng, edge_center, dim=0, dim_size=len(species))
 
         data[AtomicDataDict.PER_ATOM_ENERGY_KEY] = atom_eng
 
