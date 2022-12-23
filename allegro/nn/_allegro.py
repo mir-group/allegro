@@ -422,8 +422,15 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
 
         layer_index: int = 0
         # precompute the exp() and cumsum for each layer
-        latent_coefficients = self._latent_resnet_coefficients_params.exp()
-        latent_coefficients_cumsum = latent_coefficients.cumsum(dim=0)
+        # note that because our coefficients are exp() over sums,
+        # this is just a cummulative softmax-- so we can use the typical
+        # numerical tricks to help stability
+        # a shift to all coefficients => constant factor after exp => cancels with denominator
+        # helps prevent dividing large / large
+        latent_coefficients = self._latent_resnet_coefficients_params
+        latent_coefficients = (latent_coefficients - latent_coefficients.max()).exp()
+        # add 1e-12 so that we never divide by zero (though that is extremely unlikely)
+        latent_coefficients_cumsum = latent_coefficients.cumsum(dim=0) + 1e-12
 
         # Vectorized precompute per layer cutoffs
         cutoff_coeffs = polynomial_cutoff(
@@ -444,6 +451,8 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 # previous normalization denominator / new normalization denominator
                 # ^ cancels the old normalization, and ^ applies new
                 # sqrt accounts for stdev vs variance
+                # at the 2nd layer the cumsum is just the first coefficient, so this multiplies the
+                # previous latents (which hadn't been multiplied by anything) by coeff_0 / coeff_0 + coeff_1
                 coefficient_old = (
                     latent_coefficients_cumsum[layer_index - 1]
                     / latent_coefficients_cumsum[layer_index]
