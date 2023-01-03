@@ -23,7 +23,7 @@ class NormalizedBasis(torch.nn.Module):
         original_basis=BesselBasis,
         original_basis_kwargs: dict = {},
         n: int = 4000,
-        norm_basis_mean_shift: bool = True,
+        norm_basis_mean_shift: bool = False,
     ):
         super().__init__()
         self.basis = original_basis(**original_basis_kwargs)
@@ -44,9 +44,9 @@ class NormalizedBasis(torch.nn.Module):
             if norm_basis_mean_shift:
                 basis_std, basis_mean = torch.std_mean(bs, dim=0)
             else:
-                basis_std = bs.square().mean().sqrt()
-                basis_mean = torch.as_tensor(
-                    0.0, device=basis_std.device, dtype=basis_std.dtype
+                basis_std = bs.square().mean(dim=0).sqrt()
+                basis_mean = torch.zeros(
+                    bs.shape[-1], device=basis_std.device, dtype=basis_std.dtype
                 )
 
         self.register_buffer("_mean", basis_mean)
