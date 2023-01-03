@@ -8,14 +8,11 @@ from nequip.data import AtomicDataDict, AtomicDataset
 from nequip.nn import SequentialGraphNetwork, AtomwiseReduce
 from nequip.nn.radial_basis import BesselBasis
 
-from nequip.nn.embedding import (
-    OneHotAtomEncoding,
-    SphericalHarmonicEdgeAttrs,
-    RadialBasisEdgeEncoding,
-)
+from nequip.nn.embedding import SphericalHarmonicEdgeAttrs
 
 from allegro.nn import (
     NormalizedBasis,
+    EdgeEmbedding,
     EdgewiseEnergySum,
     Allegro_Module,
     ScalarMLP,
@@ -56,16 +53,14 @@ def Allegro(config, initialize: bool, dataset: Optional[AtomicDataset] = None):
     layers = {
         # -- Encode --
         # Get various edge invariants
-        "one_hot": OneHotAtomEncoding,
-        "radial_basis": (
-            RadialBasisEdgeEncoding,
+        "edge_embedding": (
+            EdgeEmbedding,
             dict(
                 basis=(
                     NormalizedBasis
                     if config.get("normalize_basis", True)
                     else BesselBasis
                 ),
-                out_field=AtomicDataDict.EDGE_EMBEDDING_KEY,
             ),
         ),
         # Get edge nonscalars
@@ -76,7 +71,6 @@ def Allegro(config, initialize: bool, dataset: Optional[AtomicDataset] = None):
             dict(
                 field=AtomicDataDict.EDGE_ATTRS_KEY,  # initial input is the edge SH
                 edge_invariant_field=AtomicDataDict.EDGE_EMBEDDING_KEY,
-                node_invariant_field=AtomicDataDict.NODE_ATTRS_KEY,
             ),
         ),
         "edge_eng": (

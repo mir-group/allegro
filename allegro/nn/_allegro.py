@@ -15,7 +15,6 @@ from nequip.utils.tp_utils import tp_path_exists
 from ._fc import ScalarMLPFunction
 from .. import _keys
 from ._strided import Contracter, MakeWeightedChannels, Linear
-from .cutoffs import polynomial_cutoff
 
 
 @compile_mode("script")
@@ -34,7 +33,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
     _env_builder_w_index: List[int]
     _env_builder_n_irreps: int
     _input_pad: int
-    _all_cutoffs_not_r_max: bool
 
     def __init__(
         self,
@@ -43,12 +41,9 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         num_types: int,
         r_max: float,
         avg_num_neighbors: Optional[float] = None,
-        # cutoffs
-        PolynomialCutoff_p: float = 6,
         # general hyperparameters:
         field: str = AtomicDataDict.EDGE_ATTRS_KEY,
         edge_invariant_field: str = AtomicDataDict.EDGE_EMBEDDING_KEY,
-        node_invariant_field: str = AtomicDataDict.NODE_ATTRS_KEY,
         env_embed_multiplicity: int = 32,
         linear_after_env_embed: bool = False,
         nonscalars_include_parity: bool = True,
@@ -82,10 +77,8 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         self.field = field
         self.latent_out_field = latent_out_field
         self.edge_invariant_field = edge_invariant_field
-        self.node_invariant_field = node_invariant_field
         self.latent_resnet = latent_resnet
         self.env_embed_mul = env_embed_multiplicity
-        self.polynomial_cutoff_p = float(PolynomialCutoff_p)
         self.avg_num_neighbors = avg_num_neighbors
         self.linear_after_env_embed = linear_after_env_embed
         self.env_embed_softsquare = env_embed_softsquare
@@ -99,7 +92,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             required_irreps_in=[
                 self.field,
                 self.edge_invariant_field,
-                self.node_invariant_field,
             ],
         )
 
@@ -294,10 +286,8 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                     two_body_latent(
                         mlp_input_dimension=(
                             (
-                                # Node invariants for center and neighbor (chemistry)
-                                2 * self.irreps_in[self.node_invariant_field].num_irreps
-                                # Plus edge invariants for the edge (radius).
-                                + self.irreps_in[self.edge_invariant_field].num_irreps
+                                # initial edge invariants for the edge (radial-chemical embedding).
+                                self.irreps_in[self.edge_invariant_field].num_irreps
                             )
                         ),
                         mlp_output_dimension=None,
@@ -401,22 +391,15 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 dim=-1,
             )
 
-        edge_length = data[AtomicDataDict.EDGE_LENGTH_KEY]
         edge_invariants = data[self.edge_invariant_field]
-        node_invariants = data[self.node_invariant_field]
         # pre-declare variables as Tensors for TorchScript
         scalars = self._zero
         coefficient_old = self._zero
         coefficient_new = self._zero
         latents = self._zero
 
-        # For the first layer, we use the input invariants:
-        # The center and neighbor invariants and edge invariants
-        latent_inputs_to_cat = [
-            node_invariants[edge_center],
-            node_invariants[edge_neighbor],
-            edge_invariants,
-        ]
+        # For the first layer, we use the input edge invariants
+        latent_inputs_to_cat = [edge_invariants]
         # The nonscalar features. Initially, the edge data.
         features = edge_attr
 
@@ -431,13 +414,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         latent_coefficients = (latent_coefficients - latent_coefficients.max()).exp()
         # add 1e-12 so that we never divide by zero (though that is extremely unlikely)
         latent_coefficients_cumsum = latent_coefficients.cumsum(dim=0) + 1e-12
-
-        # Vectorized precompute per layer cutoffs
-        cutoff_coeffs = polynomial_cutoff(
-            edge_length,
-            r_max=self.r_max,
-            p=self.polynomial_cutoff_p,
-        )[0]
 
         # !!!! REMEMBER !!!! update final layer if update the code in main loop!!!
         # This goes through layer0, layer1, ..., layer_max-1
@@ -467,13 +443,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 latents = coefficient_old * latents + coefficient_new * new_latents
             else:
                 # Normal (non-residual) update
-                if layer_index == 0:
-                    # Applying the cutoff here to the output of the two-body latent
-                    # carries through to:
-                    # 1) the initial features in the first layer via env embed weights
-                    # 2) the contributions to the embeded environment for the first layer via same
-                    # 3) future latents inductively
-                    new_latents = cutoff_coeffs.unsqueeze(-1) * new_latents
                 latents = new_latents
 
             # From the latents, compute the weights for active edges:
@@ -500,11 +469,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 )
 
             # Build the local environments
-            # This local environment should only be a sum over neighbors
-            # who are within the cutoff of the _current_ layer
-            # Those are the active edges, which are the only ones we
-            # have weights for (env_w) anyway.
-            # So we mask out the edges in the sum:
+            # This local environment is a sum over neighbors
             local_env_per_edge = scatter(
                 self._env_weighter(edge_attr, env_w),
                 edge_center,
