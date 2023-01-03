@@ -10,6 +10,10 @@ Most recent change on the bottom.
 
 ### Changed
 - Resnet normalization scheme
+- [Breaking] Default `norm_basis_mean_shift` `True` -> `False`
+
+### Fixed
+- `norm_basis_mean_shift=False`
 
 ### Removed
 - [Breaking] Hyperparameter `embed_initial_edge`, `cutoff_type`, `per_layer_cutoffs`
