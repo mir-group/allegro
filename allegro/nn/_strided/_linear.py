@@ -26,6 +26,7 @@ def codegen_strided_linear(
     internal_weights: bool = False,
     shared_weights: bool = False,
     pad_to_alignment: int = 1,
+    alpha: float = 1.0,
 ) -> Optional[fx.GraphModule]:
     """Returns None if strided doesn't make sense for this TP."""
     # Check if irreps can be strided
@@ -131,6 +132,7 @@ def codegen_strided_linear(
         (
             (1.0 / sqrt(sum(layout_in.mul for ins in instructions if ins.i_out == i)))
             * out
+            * alpha
         )
         if len(ins_per_output[i]) > 0
         else out
@@ -212,6 +214,7 @@ def Linear(
     internal_weights: bool = False,
     instructions: Optional[List[Tuple[int, int]]] = None,
     pad_to_alignment: int = 1,
+    alpha: float = 1.0,
 ):
     irreps_in = o3.Irreps(irreps_in)
     irreps_out = o3.Irreps(irreps_out)
@@ -235,6 +238,7 @@ def Linear(
         shared_weights=shared_weights,
         internal_weights=internal_weights,
         pad_to_alignment=pad_to_alignment,
+        alpha=alpha,
     )
 
     if mod is None:
