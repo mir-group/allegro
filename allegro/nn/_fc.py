@@ -27,7 +27,6 @@ class ScalarMLP(GraphModuleMixin, torch.nn.Module):
         mlp_output_dimension: Optional[int],
         mlp_nonlinearity: Optional[str] = "silu",
         mlp_initialization: str = "uniform",
-        mlp_dropout_p: float = 0.0,
         mlp_bias: bool = True,
         field: str = AtomicDataDict.NODE_FEATURES_KEY,
         out_field: Optional[str] = None,
@@ -49,7 +48,6 @@ class ScalarMLP(GraphModuleMixin, torch.nn.Module):
             mlp_output_dimension=mlp_output_dimension,
             mlp_nonlinearity=mlp_nonlinearity,
             mlp_initialization=mlp_initialization,
-            mlp_dropout_p=mlp_dropout_p,
             mlp_bias=mlp_bias,
         )
         self.irreps_out[self.out_field] = o3.Irreps(
@@ -74,7 +72,6 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
         mlp_output_dimension: Optional[int],
         mlp_nonlinearity: Optional[str] = "silu",
         mlp_initialization: str = "normal",
-        mlp_dropout_p: float = 0.0,
         mlp_bias: bool = True,
     ):
         super().__init__()
@@ -116,12 +113,6 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
             bias = Proxy(graph.get_attr("_bias_dummy"))
 
         for layer, (h_in, h_out) in enumerate(zip(dimensions, dimensions[1:])):
-            # do dropout
-            if mlp_dropout_p > 0:
-                # only dropout if it will do something
-                # dropout before linear projection- https://stats.stackexchange.com/a/245137
-                features = Proxy(graph.call_module("_dropout", (features.node,)))
-
             # make weights
             w = torch.empty(h_in, h_out)
 
@@ -167,10 +158,6 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
 
         for pname, p in params.items():
             setattr(base, pname, torch.nn.Parameter(p))
-
-        if mlp_dropout_p > 0:
-            # with normal dropout everything blows up
-            base._dropout = torch.nn.AlphaDropout(p=mlp_dropout_p)
 
         self._codegen_register({"_forward": fx.GraphModule(base, graph)})
 
