@@ -28,7 +28,7 @@ class ScalarMLP(GraphModuleMixin, torch.nn.Module):
         mlp_nonlinearity: Optional[str] = "silu",
         mlp_initialization: str = "uniform",
         mlp_dropout_p: float = 0.0,
-        mlp_batchnorm: bool = False,
+        mlp_bias: bool = False,
         field: str = AtomicDataDict.NODE_FEATURES_KEY,
         out_field: Optional[str] = None,
         irreps_in=None,
@@ -50,7 +50,7 @@ class ScalarMLP(GraphModuleMixin, torch.nn.Module):
             mlp_nonlinearity=mlp_nonlinearity,
             mlp_initialization=mlp_initialization,
             mlp_dropout_p=mlp_dropout_p,
-            mlp_batchnorm=mlp_batchnorm,
+            mlp_bias=mlp_bias,
         )
         self.irreps_out[self.out_field] = o3.Irreps(
             [(self._module.out_features, (0, 1))]
@@ -75,7 +75,7 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
         mlp_nonlinearity: Optional[str] = "silu",
         mlp_initialization: str = "normal",
         mlp_dropout_p: float = 0.0,
-        mlp_batchnorm: bool = False,
+        mlp_bias: bool = False,
     ):
         super().__init__()
         nonlinearity = {
@@ -111,6 +111,9 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
         norm_from_last: float = 1.0
 
         base = torch.nn.Module()
+        if not mlp_bias:
+            base.register_buffer("_bias_dummy", torch.as_tensor(0.0))
+            bias = Proxy(graph.get_attr("_bias_dummy"))
 
         for layer, (h_in, h_out) in enumerate(zip(dimensions, dimensions[1:])):
             # do dropout
@@ -138,15 +141,21 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
             # generate code
             params[f"_weight_{layer}"] = w
             w = Proxy(graph.get_attr(f"_weight_{layer}"))
-            w = w * (
-                norm_from_last / math.sqrt(float(h_in))
-            )  # include any nonlinearity normalization from previous layers
-            features = torch.matmul(features, w)
-
-            if mlp_batchnorm:
-                # if we call batchnorm, do it after the nonlinearity
-                features = Proxy(graph.call_module(f"_bn_{layer}", (features.node,)))
-                setattr(base, f"_bn_{layer}", torch.nn.BatchNorm1d(h_out))
+            if mlp_bias:
+                params[f"_bias_{layer}"] = torch.zeros(1, h_out)
+                bias = Proxy(graph.get_attr(f"_bias_{layer}"))
+            # computes beta*bias + alpha*(features @ w)
+            features = torch.addmm(
+                bias,
+                features,
+                w,
+                beta=1 if mlp_bias else 0,
+                # include any nonlinearity normalization from previous layers
+                # we want to compute nonlin_alpha * nonlin(Wx + b) at each layer
+                # at the second+ layer, this can be written as
+                # nonlin(W(nonlin_alpha * x) + b)
+                alpha=(norm_from_last / math.sqrt(float(h_in))),
+            )
 
             # generate nonlinearity code
             if nonlinearity is not None and layer < num_layers - 1:
