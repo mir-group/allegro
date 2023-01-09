@@ -8,7 +8,6 @@ from e3nn.util.jit import compile_mode
 from nequip.data import AtomicDataDict
 from nequip.nn import GraphModuleMixin
 from nequip.nn.radial_basis import BesselBasis
-from nequip.nn.cutoffs import PolynomialCutoff
 
 from ._fc import ScalarMLPFunction
 
@@ -24,9 +23,7 @@ class EdgeEmbedding(GraphModuleMixin, torch.nn.Module):
         type_embedding_mode: str = "cat",
         type_embedding_init: str = "normal",
         basis=BesselBasis,
-        cutoff=PolynomialCutoff,
         basis_kwargs={},
-        cutoff_kwargs={},
         irreps_in=None,
     ):
         super().__init__()
@@ -58,7 +55,6 @@ class EdgeEmbedding(GraphModuleMixin, torch.nn.Module):
             else:
                 raise NotImplementedError
         self.basis = basis(**basis_kwargs)
-        self.cutoff = cutoff(**cutoff_kwargs)
         self.irreps_out[AtomicDataDict.EDGE_EMBEDDING_KEY] = o3.Irreps(
             [
                 (
@@ -108,7 +104,5 @@ class EdgeEmbedding(GraphModuleMixin, torch.nn.Module):
             )
         else:
             assert False
-        data[AtomicDataDict.EDGE_EMBEDDING_KEY] = (
-            self.cutoff(edge_length).unsqueeze(-1) * edge_embed
-        )
+        data[AtomicDataDict.EDGE_EMBEDDING_KEY] = edge_embed
         return data
