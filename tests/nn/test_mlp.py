@@ -1,4 +1,5 @@
 import pytest
+import math
 
 import torch
 
@@ -39,7 +40,7 @@ def test_mlp(hs, act, init):
 
 def test_bias():
     bdim = 7
-    hs = [4, 5, 5]
+    hs = [5, 5, 5]
     data = torch.randn(bdim, hs[0])
 
     mlp = ScalarMLPFunction(
@@ -50,4 +51,13 @@ def test_bias():
         mlp_bias=True,
     )
 
-    _ = mlp(data)
+    with torch.no_grad():
+        for layer_i in range(len(hs) - 1):
+            getattr(mlp._forward, f"_weight_{layer_i}").fill_(0.0)
+            getattr(mlp._forward, f"_bias_{layer_i}").fill_(1.0)
+
+    out = mlp(data)
+    # should just be biases, so all same
+    assert torch.allclose(out, out[0, 0])
+    # should not be zero
+    assert out[0, 0] != 0.0
