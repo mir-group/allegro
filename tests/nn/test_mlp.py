@@ -32,4 +32,22 @@ def test_mlp(hs, act, init):
 
     out = mlp(data)
     assert out.shape == (bdim, hs[-1])
-    assert torch.allclose(out, fc(data), atol=1e-7)
+    assert torch.allclose(
+        out, fc(data), atol=2e-7 if torch.get_default_dtype() == torch.float32 else 1e-9
+    )
+
+
+def test_bias():
+    bdim = 7
+    hs = [4, 5, 5]
+    data = torch.randn(bdim, hs[0])
+
+    mlp = ScalarMLPFunction(
+        mlp_input_dimension=None,
+        mlp_latent_dimensions=hs,
+        mlp_output_dimension=None,
+        mlp_nonlinearity="silu",
+        mlp_bias=True,
+    )
+
+    _ = mlp(data)
