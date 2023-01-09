@@ -25,7 +25,6 @@ minimal_config2 = dict(
     l_max=3,
     parity="o3_full",
     num_layers=2,
-    env_embed_softsquare=True,
     **COMMON_CONFIG,
 )
 minimal_config3 = dict(
@@ -45,8 +44,8 @@ minimal_config5 = dict(
     l_max=3,
     parity="o3_full",
     num_layers=3,
-    latent_resnet=False,
-    env_embed_softsquare=True,
+    latent_resnet=True,
+    mlp_bias=False,
     **COMMON_CONFIG,
 )
 minimal_config6 = dict(
