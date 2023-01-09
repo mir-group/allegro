@@ -21,14 +21,8 @@ from test_contract import _strided_to_cat
 @pytest.mark.parametrize("mulout", [1, 2, 7])
 @pytest.mark.parametrize("pad", [1, 4])
 @pytest.mark.parametrize("shared_weights", [False, True])
-def test_like_linear(
-    irreps_in,
-    irreps_out,
-    mul,
-    mulout,
-    pad,
-    shared_weights,
-):
+@pytest.mark.parametrize("alpha", [1.0, 1.333448])
+def test_like_linear(irreps_in, irreps_out, mul, mulout, pad, shared_weights, alpha):
     irreps_in = o3.Irreps(irreps_in)
     irreps_out = o3.Irreps(irreps_out)
 
@@ -37,6 +31,7 @@ def test_like_linear(
         irreps_out=o3.Irreps((mulout, ir) for _, ir in irreps_out),
         shared_weights=shared_weights,
         pad_to_alignment=pad,
+        alpha=alpha,
     )
     batchdim = 7
     args_in = (
@@ -63,7 +58,7 @@ def test_like_linear(
     ours_out = _strided_to_cat(irreps_out, mulout, ours_out_strided)
     e3nn_out = e3nns(*args_e3nn)
     assert ours_out.shape == e3nn_out.shape
-    assert torch.allclose(ours_out, e3nn_out, atol=1e-6)
+    assert torch.allclose(ours_out, alpha * e3nn_out, atol=1e-6)
 
 
 @pytest.mark.parametrize(
