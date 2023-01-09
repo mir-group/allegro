@@ -16,6 +16,7 @@ from nequip.nn.cutoffs import PolynomialCutoff
 from ._fc import ScalarMLPFunction
 from .. import _keys
 from ._strided import Contracter, MakeWeightedChannels, Linear
+from ._misc import ScalarMultiply
 
 
 @compile_mode("script")
@@ -28,6 +29,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
     env_embed_mul: int
     weight_numel: int
     latent_resnet: bool
+    self_tensor_product: bool
 
     # internal values
     _env_builder_w_index: List[int]
@@ -47,6 +49,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         env_embed_multiplicity: int = 32,
         linear_after_env_embed: bool = False,
         nonscalars_include_parity: bool = True,
+        self_tensor_product: bool = False,
         # MLP parameters:
         two_body_latent=ScalarMLPFunction,
         two_body_latent_kwargs={},
@@ -83,6 +86,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         self.avg_num_neighbors = avg_num_neighbors
         self.linear_after_env_embed = linear_after_env_embed
         self.num_types = num_types
+        self.self_tensor_product = self_tensor_product
 
         self.register_buffer("r_max", torch.as_tensor(float(r_max)))
         self.cutoff = cutoff(**cutoff_kwargs)
@@ -94,14 +98,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 self.field,
                 self.edge_invariant_field,
             ],
-        )
-
-        # for normalization of env embed sums
-        # one per layer
-        self.register_buffer(
-            "env_sum_normalizations",
-            # dividing by sqrt(N)
-            torch.as_tensor(avg_num_neighbors).rsqrt(),
         )
 
         latent = functools.partial(latent, **latent_kwargs)
@@ -209,6 +205,15 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             zip(tps_irreps_in, tps_irreps_out)
         ):
             # Make the env embed linear
+            # This linear comes right after the env sum
+            # So we divide by sqrt(N) to normalize
+            # note that if self_tensor_product = False, then the number of neighbors being summed is one smaller
+            if avg_num_neighbors is not None:
+                env_linear_alpha = 1.0 / math.sqrt(
+                    avg_num_neighbors - (0 if self.self_tensor_product else 1)
+                )
+            else:
+                env_linear_alpha = 1.0
             if self.linear_after_env_embed:
                 self.env_linears.append(
                     Linear(
@@ -216,10 +221,15 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                         [(env_embed_multiplicity, ir) for _, ir in env_embed_irreps],
                         shared_weights=True,
                         internal_weights=True,
+                        alpha=env_linear_alpha,
                     )
                 )
             else:
-                self.env_linears.append(torch.nn.Identity())
+                self.env_linears.append(
+                    ScalarMultiply(env_linear_alpha)
+                    if env_linear_alpha != 1.0
+                    else torch.nn.Identity()
+                )
             # Make TP
             tmp_i_out: int = 0
             instr = []
@@ -464,25 +474,24 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
 
             # Build the local environments
             # This local environment is a sum over neighbors
+            env_w_edges = self._env_weighter(edge_attr, env_w)
             local_env_per_edge = scatter(
-                self._env_weighter(edge_attr, env_w),
+                env_w_edges,
                 edge_center,
                 dim=0,
             )
-            if self.env_sum_normalizations.ndim == 0:
-                # it's a scalar per layer
-                env_sum_norm_factor = self.env_sum_normalizations
-            else:
-                # it's per type
-                # get shape [N_atom, 1] for broadcasting
-                env_sum_norm_factor = self.env_sum_normalizations[
-                    data[AtomicDataDict.ATOM_TYPE_KEY]
-                ].unsqueeze(-1)
-            local_env_per_edge = local_env_per_edge * env_sum_norm_factor
-            local_env_per_edge = env_linear(local_env_per_edge)
-            # Copy to get per-edge
-            # Large allocation, but no better way to do this:
+            # make it per edge
             local_env_per_edge = local_env_per_edge[edge_center]
+
+            if not self.self_tensor_product:
+                # subtract out the current edge from each env sum
+                # sum_i{x_i} - x_j = sum_{i != j}{x_i}
+                # this gives for each edge a sum over all _other_ edges sharing the center
+                # i.e.  env_ij = sum_{k for k != j}{edge_ik}
+                local_env_per_edge = local_env_per_edge - env_w_edges
+
+            # note that env_linear takes care of the normalization constant
+            local_env_per_edge = env_linear(local_env_per_edge)
 
             # Now do the TP
             # recursively tp current features with the environment embeddings
