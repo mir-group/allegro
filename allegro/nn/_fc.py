@@ -28,7 +28,7 @@ class ScalarMLP(GraphModuleMixin, torch.nn.Module):
         mlp_nonlinearity: Optional[str] = "silu",
         mlp_initialization: str = "uniform",
         mlp_dropout_p: float = 0.0,
-        mlp_bias: bool = False,
+        mlp_bias: bool = True,
         field: str = AtomicDataDict.NODE_FEATURES_KEY,
         out_field: Optional[str] = None,
         irreps_in=None,
@@ -75,7 +75,7 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
         mlp_nonlinearity: Optional[str] = "silu",
         mlp_initialization: str = "normal",
         mlp_dropout_p: float = 0.0,
-        mlp_bias: bool = False,
+        mlp_bias: bool = True,
     ):
         super().__init__()
         nonlinearity = {
