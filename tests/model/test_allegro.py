@@ -9,10 +9,10 @@ COMMON_CONFIG = {
     "num_types": 3,
     "types_names": ["H", "C", "O"],
     "env_embed_multiplicity": 4,
-    "two_body_latent_mlp_latent_dimensions": [32],
-    "latent_mlp_latent_dimensions": [32],
+    "two_body_latent_mlp_latent_dimensions": [16],
+    "latent_mlp_latent_dimensions": [16, 16],
     "env_embed_mlp_latent_dimensions": [],
-    "edge_eng_mlp_latent_dimensions": [16],
+    "edge_eng_mlp_latent_dimensions": [8],
 }
 # TODO: test so3 mode when can pass down option to assert equivariance to ignore parity
 minimal_config1 = dict(
@@ -45,13 +45,14 @@ minimal_config5 = dict(
     parity="o3_full",
     num_layers=3,
     latent_resnet=True,
-    mlp_bias=True,
+    internal_weight_tp="uvv",
     **COMMON_CONFIG,
 )
 minimal_config6 = dict(
     l_max=4,
     parity="o3_full",
     num_layers=2,
+    internal_weight_tp="p",
     **COMMON_CONFIG,
 )
 
