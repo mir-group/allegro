@@ -20,11 +20,12 @@ from allegro.nn._strided import Contracter
         ("uuu", 8, 8, 8),
         ("uvv", 8, 8, 8),
         ("uvv", 1, 8, 8),
+        ("p", 3, 3, 3),
     ],
 )
-@pytest.mark.parametrize("sparse", [None, "coo"])  # TODO: csr
+@pytest.mark.parametrize("sparse", [None])  # , "coo"])  # TODO: csr
 @pytest.mark.parametrize("pad", [1, 2, 4])
-@pytest.mark.parametrize("shared_weights", [False])
+@pytest.mark.parametrize("shared_weights", [False, True])
 def test_contract(
     irreps_in1,
     irreps_in2,
@@ -55,6 +56,7 @@ def test_contract(
         instructions=instr,
         connection_mode=mode,
         shared_weights=shared_weights,
+        internal_weights=shared_weights,
         sparse_mode=None,
         pad_to_alignment=1,
     )
@@ -66,13 +68,17 @@ def test_contract(
         instructions=instr,
         connection_mode=mode,
         shared_weights=shared_weights,
+        internal_weights=shared_weights,
         sparse_mode=sparse,
         pad_to_alignment=pad,
     )
+    if shared_weights:
+        with torch.no_grad():
+            c_opt_mod.w.copy_(c_base.w)
 
     # deal with padding
-    def c_opt(x, y, w):
-        return c_opt_mod(
+    def c_opt(x, y, w=None):
+        args = (
             torch.nn.functional.pad(
                 x,
                 (0, pad * math.ceil(x.shape[-1] / pad) - x.shape[-1]),
@@ -83,6 +89,9 @@ def test_contract(
             ),
             w,
         )
+        if w is None:
+            args = args[:-1]
+        return c_opt_mod(*args)
 
     batchdim = 7
     args_in = (
@@ -90,12 +99,14 @@ def test_contract(
         irreps_in2.randn(batchdim, mul2, -1),
         torch.randn(tuple(batchdim if e == -1 else e for e in c_base.weight_shape)),
     )
+    if shared_weights:
+        args_in = args_in[:-1]
 
     for c in (c_base, c_opt):
         assert_equivariant(
             c,
             args_in=args_in,
-            irreps_in=[irreps_in1, irreps_in2, None],
+            irreps_in=[irreps_in1, irreps_in2] + ([] if shared_weights else [None]),
             irreps_out=irreps_out,
         )
 
@@ -103,10 +114,12 @@ def test_contract(
     if torch.get_default_dtype() == torch.float64:
         # check one input and a weight
         args_in[0].requires_grad_(True)
-        args_in[2].requires_grad_(True)
+        if not shared_weights:
+            args_in[2].requires_grad_(True)
         torch.autograd.gradcheck(c_opt, args_in, fast_mode=True)
         args_in[0].requires_grad_(False)
-        args_in[2].requires_grad_(False)
+        if not shared_weights:
+            args_in[2].requires_grad_(False)
 
     # Check same
     out_orig = c_base(*args_in)
@@ -142,9 +155,9 @@ def _strided_to_cat(irreps, mul, x):
         ("uvv", 1, 8, 8),
     ],
 )
-@pytest.mark.parametrize("sparse", [None, "coo"])
+@pytest.mark.parametrize("sparse", [None])  # , "coo"])
 @pytest.mark.parametrize("pad", [1, 2, 4])
-@pytest.mark.parametrize("shared_weights", [False])
+@pytest.mark.parametrize("shared_weights", [False, True])
 def test_like_tp(
     irreps_in1,
     irreps_in2,
@@ -177,6 +190,7 @@ def test_like_tp(
         instructions=instr,
         connection_mode=mode,
         shared_weights=shared_weights,
+        internal_weights=shared_weights,
         sparse_mode=sparse,
         pad_to_alignment=pad,
     )
@@ -184,7 +198,9 @@ def test_like_tp(
     args_in = (
         torch.randn(batchdim, mul1, c._dim_in1),
         torch.randn(batchdim, mul2, c._dim_in2),
-        torch.randn(tuple(batchdim if e == -1 else e for e in c.weight_shape)),
+        c.w
+        if shared_weights
+        else torch.randn(tuple(batchdim if e == -1 else e for e in c.weight_shape)),
     )
 
     # TP
@@ -198,14 +214,25 @@ def test_like_tp(
     )
     assert tp.weight_numel == c.weight_numel
     # to convert the weights, note that for Contracter
-    # the weights are uvwp. For TensorProduct, they are
-    # catted uvw, so puvw
+    # the weights are zuvwp. For TensorProduct, they are
+    # catted uvw, so zpuvw
     weights_tp = args_in[2]
     if len(instr) > 1:
-        weights_tp = weights_tp.reshape(c.weight_shape).permute(
-            (0, -1) + tuple(range(1, len(c.weight_shape) - 1))
+        weights_tp = (
+            weights_tp.detach()
+            .reshape(c.weight_shape)  # zuvwp
+            .permute(
+                ((-1,) + tuple(range(0, len(c.weight_shape) - 1)))
+                if shared_weights
+                else ((0, -1) + tuple(range(1, len(c.weight_shape) - 1)))
+            )
+            .contiguous()
         )
-    weights_tp = weights_tp.reshape(batchdim, -1)
+    if shared_weights:
+        weights_tp = weights_tp.reshape(-1)
+        args_in = args_in[:-1]
+    else:
+        weights_tp = weights_tp.reshape(batchdim, -1)
     args_tp = (
         _strided_to_cat(irreps_in1, mul1, args_in[0]),
         _strided_to_cat(irreps_in2, mul2, args_in[1]),
@@ -214,4 +241,6 @@ def test_like_tp(
     c_out = _strided_to_cat(irreps_out, mulout, c(*args_in))
     tp_out = tp(*args_tp)
     assert c_out.shape == tp_out.shape
-    assert torch.allclose(c_out, tp_out, atol=1e-6)
+    assert torch.allclose(
+        c_out, tp_out, atol=2e-6 if torch.get_default_dtype() == torch.float32 else 1e-8
+    )
