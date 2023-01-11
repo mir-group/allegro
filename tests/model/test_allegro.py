@@ -45,7 +45,7 @@ minimal_config5 = dict(
     parity="o3_full",
     num_layers=3,
     latent_resnet=True,
-    mlp_bias=False,
+    mlp_bias=True,
     **COMMON_CONFIG,
 )
 minimal_config6 = dict(
