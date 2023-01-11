@@ -9,8 +9,8 @@ COMMON_CONFIG = {
     "num_types": 3,
     "types_names": ["H", "C", "O"],
     "env_embed_multiplicity": 4,
-    "two_body_latent_mlp_latent_dimensions": [16],
-    "latent_mlp_latent_dimensions": [16, 16],
+    "two_body_latent_mlp_latent_dimensions": [32],
+    "latent_mlp_latent_dimensions": [32, 32],
     "env_embed_mlp_latent_dimensions": [],
     "edge_eng_mlp_latent_dimensions": [8],
 }
