@@ -1,5 +1,7 @@
 from typing import List, Optional
 import math
+import operator
+import functools
 
 import torch
 from torch import fx
@@ -27,7 +29,7 @@ class ScalarMLP(GraphModuleMixin, torch.nn.Module):
         mlp_output_dimension: Optional[int],
         mlp_nonlinearity: Optional[str] = "silu",
         mlp_initialization: str = "uniform",
-        mlp_bias: bool = True,
+        mlp_bias: bool = False,
         field: str = AtomicDataDict.NODE_FEATURES_KEY,
         out_field: Optional[str] = None,
         irreps_in=None,
@@ -72,7 +74,7 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
         mlp_output_dimension: Optional[int],
         mlp_nonlinearity: Optional[str] = "silu",
         mlp_initialization: str = "normal",
-        mlp_bias: bool = True,
+        mlp_bias: bool = False,
     ):
         super().__init__()
         nonlinearity = {
@@ -104,16 +106,10 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
         def Proxy(n):
             return fx.Proxy(n, tracer=tracer)
 
-        features = Proxy(graph.placeholder("x"))
-        norm_from_last: float = 1.0
-
         base = torch.nn.Module()
-        if not mlp_bias:
-            base.register_buffer("_bias_dummy", torch.as_tensor(0.0))
-            bias = Proxy(graph.get_attr("_bias_dummy"))
 
+        # make weights
         for layer, (h_in, h_out) in enumerate(zip(dimensions, dimensions[1:])):
-            # make weights
             w = torch.empty(h_in, h_out)
 
             if mlp_initialization == "normal":
@@ -129,30 +125,65 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
                     f"Invalid mlp_initialization {mlp_initialization}"
                 )
 
-            # generate code
             params[f"_weight_{layer}"] = w
-            w = Proxy(graph.get_attr(f"_weight_{layer}"))
             if mlp_bias:
                 params[f"_bias_{layer}"] = torch.zeros(1, h_out)
-                bias = Proxy(graph.get_attr(f"_bias_{layer}"))
-            # computes beta*bias + alpha*(features @ w)
-            features = torch.addmm(
-                bias,
-                features,
-                w,
-                beta=1 if mlp_bias else 0,
-                # include any nonlinearity normalization from previous layers
-                # we want to compute nonlin_alpha * nonlin(Wx + b) at each layer
-                # at the second+ layer, this can be written as
-                # nonlin(W(nonlin_alpha * x) + b)
-                alpha=(norm_from_last / math.sqrt(float(h_in))),
-            )
 
-            # generate nonlinearity code
-            if nonlinearity is not None and layer < num_layers - 1:
-                features = nonlinearity(features)
-                # add the normalization const in next layer
-                norm_from_last = nonlin_const
+        # generate code
+        features = Proxy(graph.placeholder("x"))
+        weights = [
+            Proxy(graph.get_attr(f"_weight_{layer}"))
+            for layer in range(len(dimensions) - 1)
+        ]
+        if mlp_bias:
+            biases = [
+                Proxy(graph.get_attr(f"_bias_{layer}"))
+                for layer in range(len(dimensions) - 1)
+            ]
+        else:
+            base.register_buffer("_bias_dummy", torch.as_tensor(0.0))
+            biases = [Proxy(graph.get_attr("_bias_dummy"))] * (len(dimensions) - 1)
+
+        if (len(weights) > 1) and (not mlp_bias) and (nonlinearity is None):
+            # we can special case since the whole thing is linear
+            # we don't special case the linear projection case since:
+            #  1) addmm can fuse the scalar multiply
+            #  2) multi_dot doesn't support the identity case
+            norm_constant = 1.0 / functools.reduce(
+                operator.mul, [math.sqrt(float(d)) for d in dimensions[:-1]]
+            )
+            # matmul is linear
+            weights[0] = weights[0] * norm_constant
+            # apply the first layer first
+            # Originally, we have:
+            # ((x @ W1) @ W2 ) @ W3 = (W3 @ (W2 @ (W1 @ x)))^T = x @ (W3 @ W2 @ W1)^T
+            total_weight = torch.linalg.multi_dot(weights)
+            #            = torch.linalg.multi_dot([w.T for w in weights[::-1]]).T
+            features = torch.mm(features, total_weight)
+        else:
+            # generate normal full MLP code
+            norm_from_last: float = 1.0
+            for layer, (h_in, h_out, w, bias) in enumerate(
+                zip(dimensions, dimensions[1:], weights, biases)
+            ):
+                # computes beta*bias + alpha*(features @ w)
+                features = torch.addmm(
+                    bias,
+                    features,
+                    w,
+                    beta=1 if mlp_bias else 0,
+                    # include any nonlinearity normalization from previous layers
+                    # we want to compute nonlin_alpha * nonlin(Wx + b) at each layer
+                    # at the second+ layer, this can be written as
+                    # nonlin(W(nonlin_alpha * x) + b)
+                    alpha=(norm_from_last / math.sqrt(float(h_in))),
+                )
+
+                # generate nonlinearity code
+                if nonlinearity is not None and layer < num_layers - 1:
+                    features = nonlinearity(features)
+                    # add the normalization const in next layer
+                    norm_from_last = nonlin_const
 
         graph.output(features.node)
 
