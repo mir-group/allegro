@@ -11,7 +11,6 @@ from e3nn.util.jit import compile_mode
 from nequip.data import AtomicDataDict
 from nequip.nn import GraphModuleMixin
 from nequip.utils.tp_utils import tp_path_exists
-from nequip.nn.cutoffs import PolynomialCutoff
 
 from ._fc import ScalarMLPFunction
 from .. import _keys
@@ -62,8 +61,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         latent_resnet_coefficients: Optional[List[float]] = None,
         latent_resnet_coefficients_learnable: bool = False,
         latent_out_field: Optional[str] = _keys.EDGE_FEATURES,
-        cutoff=PolynomialCutoff,
-        cutoff_kwargs={},
         # Performance parameters:
         pad_to_alignment: int = 1,
         sparse_mode: Optional[str] = None,
@@ -96,7 +93,10 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         self.internal_weight_tp = internal_weight_tp
 
         self.register_buffer("r_max", torch.as_tensor(float(r_max)))
-        self.cutoff = cutoff(**cutoff_kwargs)
+        assert not any(
+            k["mlp_bias"]
+            for k in (two_body_latent_kwargs, latent_kwargs, env_embed_kwargs)
+        )
 
         # set up irreps
         self._init_irreps(
@@ -438,9 +438,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         # add 1e-12 so that we never divide by zero (though that is extremely unlikely)
         latent_coefficients_cumsum = latent_coefficients.cumsum(dim=0) + 1e-12
 
-        # precompute cutoff coefficients
-        cutoff_coeffs = self.cutoff(data[AtomicDataDict.EDGE_LENGTH_KEY]).unsqueeze(-1)
-
         # !!!! REMEMBER !!!! update final layer if update the code in main loop!!!
         # This goes through layer0, layer1, ..., layer_max-1
         for latent, env_embed_mlp, env_linear, tp, linear in zip(
@@ -472,9 +469,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 latents = new_latents
 
             # From the latents, compute the weights for active edges:
-            # we apply the cutoff here to make sure neighbors' contributions
-            # go smoothly to zero as they go to to the cutoff
-            weights = env_embed_mlp(latents) * cutoff_coeffs
+            weights = env_embed_mlp(latents)
             w_index: int = 0
 
             if layer_index == 0:
@@ -552,8 +547,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         # - end final layer -
 
         # final latents
-        # We apply the cutoff to the final latents to ensure that
-        # the edge's own features goes to zero as it goes to r_max
-        data[self.latent_out_field] = latents * cutoff_coeffs
+        data[self.latent_out_field] = latents
 
         return data
