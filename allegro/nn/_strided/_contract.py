@@ -9,7 +9,7 @@ from e3nn.util.jit import compile
 from e3nn.util import prod
 from e3nn.o3 import Instruction
 
-from opt_einsum_fx import jitable, optimize_einsums_full
+from opt_einsum_fx import jitable, optimize_einsums, EfficientShapeProp
 
 from ._layout import StridedLayout
 from ._spmm import ExplicitGradSpmm
@@ -25,6 +25,7 @@ def codegen_strided_tensor_product_forward(
     instructions: List[Instruction],
     normalization: str = "component",
     shared_weights: bool = False,
+    internal_weights: bool = False,
     specialized_code: bool = True,
     sparse_mode: Optional[str] = None,
     pad_to_alignment: int = 1,
@@ -52,6 +53,10 @@ def codegen_strided_tensor_product_forward(
         return None
     if not has_weight:
         assert connection_mode == "uuu"  # for now
+
+    if internal_weights:
+        assert shared_weights
+        assert has_weight
 
     # TODO: sort insturctions?
 
@@ -101,6 +106,8 @@ def codegen_strided_tensor_product_forward(
                     "uuw": layout_in1.mul,
                     "uuu": 1,
                     "uvuv": 1,
+                    # p means just to weight paths, so no change to normalization per-path
+                    "p": 1,
                 }[connection_mode]
                 for i in instructions
                 if i.i_out == ins.i_out
@@ -192,10 +199,10 @@ def codegen_strided_tensor_product_forward(
         raise ValueError
 
     # Generate the mixer
-    u, v, w = connection_mode
-    uv = {"uv": "uv", "uu": "u"}[connection_mode[:2]]
+    u, v, w = "uuu" if connection_mode == "p" else connection_mode
+    uv = {"uv": "uv", "uu": "u", "p": None}[connection_mode[:2]]
     if has_weight:
-        weight_label = {"uvw": "uvw", "uuu": "u", "uvv": "uv"}[connection_mode]
+        weight_label = {"uvw": "uvw", "uuu": "u", "uvv": "uv", "p": ""}[connection_mode]
 
         z = "" if shared_weights else "z"
 
@@ -203,7 +210,10 @@ def codegen_strided_tensor_product_forward(
             "uvw": (layout_in1.mul, layout_in2.mul, layout_out.mul),
             "uuu": (layout_in1.mul,),
             "uvv": (layout_in1.mul, layout_in2.mul),
+            "p": tuple(),
         }[connection_mode]
+        if connection_mode == "p":
+            assert num_paths > 1
         if num_paths > 1:
             # ^ if there's only one weighted path, the einsum simplifies without the p dimension
             weight_label = weight_label + "p"
@@ -215,6 +225,7 @@ def codegen_strided_tensor_product_forward(
 
     # generate actual code
     graph_out = fx.Graph()
+    base_module = torch.nn.Module()
     tracer = fx.proxy.GraphAppendingTracer(graph_out)
 
     def Proxy(n):
@@ -224,8 +235,12 @@ def codegen_strided_tensor_product_forward(
     x1s_out = Proxy(graph_out.placeholder("x1", torch.Tensor))
     x2s_out = Proxy(graph_out.placeholder("x2", torch.Tensor))
     if has_weight:
-        ws_out = Proxy(graph_out.placeholder("w", torch.Tensor))
-        ws_out = ws_out.reshape(weight_shape)
+        if internal_weights:
+            ws_out = Proxy(graph_out.get_attr("w", torch.Tensor))
+            base_module.w = torch.nn.Parameter(torch.randn(weight_shape))
+        else:
+            ws_out = Proxy(graph_out.placeholder("w", torch.Tensor))
+            ws_out = ws_out.reshape(weight_shape)
 
     if sparse_mode is None:
         w3j_proxy = Proxy(graph_out.get_attr("_big_w3j"))
@@ -239,10 +254,28 @@ def codegen_strided_tensor_product_forward(
     j = "i" if w3j_is_ij_diagonal else "j"
     ij = "i" if w3j_is_ij_diagonal else "ij"
     if has_weight:
+        p = "p" if num_paths > 1 else ""
         if sparse_mode is None:
-            # use einsum for the full contract
-            einstr = f"{z}{weight_label},z{u}i,z{v}{j},{'p' if num_paths > 1 else ''}k{ij}->z{w}k"
-            out = torch.einsum(einstr, ws_out, x1s_out, x2s_out, w3j_proxy)
+            if shared_weights:
+                # for shared weights, we can precontract weights and w3j so they can be frozen together
+                # this is usually advantageous for inference, since the weights would have to be
+                # multiplied in anyway at some point
+                ww3j_proxy = torch.einsum(
+                    f"{weight_label},{p}k{ij}->{weight_label.rstrip('p')}k{ij}",
+                    ws_out,
+                    w3j_proxy,
+                )
+                # we use minimal opt_einsum_fx later without einsum fusion, so this is safe
+                out = torch.einsum(
+                    f"z{u}i,z{v}{j},{weight_label.rstrip('p')}k{ij}->z{w}k",
+                    x1s_out,
+                    x2s_out,
+                    ww3j_proxy,
+                )
+            else:
+                # use einsum for the full contract
+                einstr = f"{z}{weight_label},z{u}i,z{v}{j},{p}k{ij}->z{w}k"
+                out = torch.einsum(einstr, ws_out, x1s_out, x2s_out, w3j_proxy)
         else:
             outer = torch.einsum(f"z{u}i,z{v}{j}->z{uv}{ij}", x1s_out, x2s_out)
             # \/ has shape [pk][ij] * [ij][zuv] = [pk][zuv]
@@ -304,15 +337,10 @@ def codegen_strided_tensor_product_forward(
     graph_out.lint()
 
     # Make GraphModules
-    # By putting the constants in a Module rather than a dict,
-    # we force FX to copy them as buffers instead of as attributes.
-    #
-    # FX seems to have resolved this issue for dicts in 1.9, but we support all the way back to 1.8.0.
-    constants_root = torch.nn.Module()
-    constants_root.register_buffer("_big_w3j", w3j)
+    base_module.register_buffer("_big_w3j", w3j)
     if sparse_mode is not None:
-        constants_root._w3j_mm = ExplicitGradSpmm(w3j)
-    graphmod_out = fx.GraphModule(constants_root, graph_out, class_name="tp_forward")
+        base_module._w3j_mm = ExplicitGradSpmm(w3j)
+    graphmod_out = fx.GraphModule(base_module, graph_out, class_name="tp_forward")
 
     if True:  # optimize_einsums
         # Note that for our einsums, we can optimize _once_ for _any_ batch dimension
@@ -328,10 +356,6 @@ def codegen_strided_tensor_product_forward(
         # https://github.com/dgasmith/opt_einsum/issues/158
         # for more details.
         #
-        # TODO: consider the impact maximum intermediate result size on this logic
-        #         \- this is the `memory_limit` option in opt_einsum
-        # TODO: allow user to choose opt_einsum parameters?
-        #
         # We use float32 and zeros to save memory and time, since opt_einsum_fx looks only at traced shapes, not values or dtypes.
         batchdim = 4
         example_inputs = (
@@ -340,9 +364,21 @@ def codegen_strided_tensor_product_forward(
             torch.zeros(
                 1 if shared_weights else batchdim,
                 sum(prod(ins.path_shape) for ins in instructions if ins.has_weight),
-            ),
+            ).squeeze(0),
         )
-        graphmod_out = jitable(optimize_einsums_full(graphmod_out, example_inputs))
+        if internal_weights:
+            example_inputs = example_inputs[:-1]
+        # graphmod_out = jitable(optimize_einsums_full(graphmod_out, example_inputs))
+        # We do a minimal einsum optimization, since all codegen above only contains
+        # either one einsum or intentionally two separate einsums, so we can avoid
+        # einsum fusion, and all scalars are already rolled into the w3j, so
+        # we can skip scalar fusion.
+        # Shape propagation
+        sp = EfficientShapeProp(graphmod_out)
+        sp.run(*example_inputs)
+        # Optimize einsums
+        graphmod_out.graph = jitable(optimize_einsums(graphmod_out.graph))
+        graphmod_out.recompile()
 
     graphmod_out.weight_shape = weight_shape
     graphmod_out._dim_in1 = layout_in1.base_dim
@@ -371,6 +407,7 @@ def Contracter(
     connection_mode: str,
     pad_to_alignment: int = 1,
     shared_weights: bool = False,
+    internal_weights: bool = False,
     sparse_mode: Optional[str] = None,
 ):
     irreps_in1 = o3.Irreps(irreps_in1)
@@ -409,11 +446,13 @@ def Contracter(
                         irreps_in1[i_in1].mul,
                         irreps_in2[i_in2].mul,
                     ),
+                    "p": tuple(),
                 }[connection_mode],
             )
             for i_in1, i_in2, i_out in instructions
         ],
         shared_weights=shared_weights,
+        internal_weights=internal_weights,
         sparse_mode=sparse_mode,
         pad_to_alignment=pad_to_alignment,
     )

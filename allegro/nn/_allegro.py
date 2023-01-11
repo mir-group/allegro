@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Union
 import math
 import functools
 
@@ -50,6 +50,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         linear_after_env_embed: bool = False,
         nonscalars_include_parity: bool = True,
         self_tensor_product: bool = False,
+        internal_weight_tp: Union[bool, str] = False,
         # MLP parameters:
         two_body_latent=ScalarMLPFunction,
         two_body_latent_kwargs={},
@@ -87,6 +88,12 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         self.linear_after_env_embed = linear_after_env_embed
         self.num_types = num_types
         self.self_tensor_product = self_tensor_product
+
+        internal_weight_tp_mode = (
+            "uuu" if internal_weight_tp is False else internal_weight_tp
+        )
+        internal_weight_tp = bool(internal_weight_tp)
+        self.internal_weight_tp = internal_weight_tp
 
         self.register_buffer("r_max", torch.as_tensor(float(r_max)))
         self.cutoff = cutoff(**cutoff_kwargs)
@@ -234,16 +241,21 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             tmp_i_out: int = 0
             instr = []
             n_scalar_outs: int = 0
-            full_out_irreps = []
+            full_out_irreps = out_irreps if internal_weight_tp else []
             for i_out, (_, ir_out) in enumerate(out_irreps):
                 for i_1, (_, ir_1) in enumerate(arg_irreps):
                     for i_2, (_, ir_2) in enumerate(env_embed_irreps):
                         if ir_out in ir_1 * ir_2:
-                            if ir_out == SCALAR:
-                                n_scalar_outs += 1
-                            instr.append((i_1, i_2, tmp_i_out))
-                            full_out_irreps.append((env_embed_multiplicity, ir_out))
-                            tmp_i_out += 1
+                            if internal_weight_tp:
+                                if ir_out == SCALAR:
+                                    n_scalar_outs = 1
+                                instr.append((i_1, i_2, i_out))
+                            else:
+                                if ir_out == SCALAR:
+                                    n_scalar_outs += 1
+                                instr.append((i_1, i_2, tmp_i_out))
+                                full_out_irreps.append((env_embed_multiplicity, ir_out))
+                                tmp_i_out += 1
             full_out_irreps = o3.Irreps(full_out_irreps)
             self._n_scalar_outs.append(n_scalar_outs)
             assert all(ir == SCALAR for _, ir in full_out_irreps[:n_scalar_outs])
@@ -258,9 +270,10 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                     [(env_embed_multiplicity, ir) for _, ir in full_out_irreps]
                 ),
                 instructions=instr,
-                connection_mode="uuu",
-                shared_weights=False,
-                has_weight=False,
+                connection_mode=internal_weight_tp_mode,
+                shared_weights=internal_weight_tp,
+                has_weight=internal_weight_tp,
+                internal_weights=internal_weight_tp,
                 pad_to_alignment=pad_to_alignment,
                 sparse_mode=sparse_mode,
             )
@@ -287,6 +300,8 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                     internal_weights=True,
                     pad_to_alignment=pad_to_alignment,
                 )
+                if not internal_weight_tp
+                else torch.nn.Identity()
             )
 
             if layer_idx == 0:
