@@ -324,7 +324,11 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                         mlp_input_dimension=(
                             (
                                 # the embedded latent invariants from the previous layer(s)
-                                self.latents[-1].out_features
+                                (
+                                    self.latents[-1].out_features
+                                    if self.latent_resnet
+                                    else sum(mlp.out_features for mlp in self.latents)
+                                )
                                 # and the invariants extracted from the last layer's TP:
                                 # above, we already appended the n_scalar_out for the new TP for
                                 # the layer we are building right now. So, we need -2
@@ -350,7 +354,11 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         # we don't need to propagate nonscalars, so there is no TP
         # thus we only need the latent:
         self.final_latent = latent(
-            mlp_input_dimension=self.latents[-1].out_features
+            mlp_input_dimension=(
+                self.latents[-1].out_features
+                if self.latent_resnet
+                else sum(mlp.out_features for mlp in self.latents)
+            )
             # here we use self._n_scalar_outs[-1] since we haven't appended anything to it
             # so it is still the correct n_scalar_outs for the previous (and last) TP
             + env_embed_multiplicity * self._n_scalar_outs[-1],
@@ -438,6 +446,8 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         # add 1e-12 so that we never divide by zero (though that is extremely unlikely)
         latent_coefficients_cumsum = latent_coefficients.cumsum(dim=0) + 1e-12
 
+        prev_latents_for_next = []
+
         # !!!! REMEMBER !!!! update final layer if update the code in main loop!!!
         # This goes through layer0, layer1, ..., layer_max-1
         for latent, env_embed_mlp, env_linear, tp, linear in zip(
@@ -464,9 +474,11 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 # Residual update
                 # Note that it only runs when there are latents to resnet with
                 latents = coefficient_old * latents + coefficient_new * new_latents
+                prev_latents_for_next = [latents]
             else:
                 # Normal (non-residual) update
                 latents = new_latents
+                prev_latents_for_next.append(latents)
 
             # From the latents, compute the weights for active edges:
             weights = env_embed_mlp(latents)
@@ -519,10 +531,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
 
             # For layer2+, use the previous latents and scalars
             # This makes it deep
-            latent_inputs_to_cat = [
-                latents,
-                scalars,
-            ]
+            latent_inputs_to_cat = prev_latents_for_next + [scalars]
 
             # increment counter
             layer_index += 1
