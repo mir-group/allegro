@@ -1,6 +1,81 @@
+import math
+
 import torch
 
-from nequip.nn.radial_basis import BesselBasis
+
+class BesselBasis(torch.nn.Module):
+    r_max: float
+    prefactor: float
+    cutoff_p: float
+
+    def __init__(
+        self,
+        r_max: float,
+        num_bessels_per_basis: int = 8,
+        num_bases: int = 1,
+        trainable: bool = True,
+    ):
+        r"""Radial Bessel Basis with Polynomial Cutoff, as proposed in DimeNet: https://arxiv.org/abs/2003.03123
+
+
+        Parameters
+        ----------
+        r_max : float
+            Cutoff radius
+
+        num_basis : int
+            Number of Bessel Basis functions
+
+        trainable : bool
+            Train the :math:`n \pi` part or not.
+        """
+        super().__init__()
+
+        self.trainable = trainable
+        self.num_bases = num_bases
+        assert num_bases >= 1
+        if num_bases > 1:
+            assert trainable
+        self.num_bessels_per_basis = num_bessels_per_basis
+        self.num_basis = num_bessels_per_basis * num_bases
+        self.r_max = float(r_max)
+        self.prefactor = math.sqrt(2.0 / self.r_max)
+
+        bessel_weights = (
+            (
+                torch.linspace(
+                    start=1.0, end=num_bessels_per_basis, steps=num_bessels_per_basis
+                )
+                * (math.pi / self.r_max)
+            )
+            .unsqueeze(0)
+            .expand(num_bases, num_bessels_per_basis)
+            .clone(memory_format=torch.contiguous_format)
+        )
+        if self.trainable:
+            self.bessel_weights = torch.nn.Parameter(bessel_weights)
+        else:
+            self.register_buffer("bessel_weights", bessel_weights)
+
+    def forward(self, r: torch.Tensor) -> torch.Tensor:
+        """
+        Evaluate basis for input x.
+
+        Parameters
+        ----------
+        r : torch.Tensor
+            Values to embed
+
+        Returns
+        -------
+            basis
+        """
+        r = r.view(-1, 1, 1)
+
+        # [z, 1, 1] * [num_bases, num_basis] = [z, num_bases, num_basis]
+        bessel = (self.prefactor / r) * torch.sin(r * self.bessel_weights)
+
+        return bessel.view(-1, self.num_basis)
 
 
 class NormalizedBasis(torch.nn.Module):
@@ -15,6 +90,7 @@ class NormalizedBasis(torch.nn.Module):
     """
 
     num_basis: int
+    norm_basis_mean_shift: bool
 
     def __init__(
         self,
@@ -34,6 +110,7 @@ class NormalizedBasis(torch.nn.Module):
         self.n = n
 
         self.num_basis = self.basis.num_basis
+        self.norm_basis_mean_shift = norm_basis_mean_shift
 
         # Uniform distribution on [r_min, r_max)
         with torch.no_grad():
@@ -45,12 +122,13 @@ class NormalizedBasis(torch.nn.Module):
                 basis_std, basis_mean = torch.std_mean(bs, dim=0)
             else:
                 basis_std = bs.square().mean(dim=0).sqrt()
-                basis_mean = torch.zeros(
-                    bs.shape[-1], device=basis_std.device, dtype=basis_std.dtype
-                )
+                basis_mean = torch.Tensor()
 
         self.register_buffer("_mean", basis_mean)
         self.register_buffer("_inv_std", torch.reciprocal(basis_std))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return (self.basis(x) - self._mean) * self._inv_std
+        basis = self.basis(x)
+        if self.norm_basis_mean_shift:
+            basis = basis - self._mean
+        return basis * self._inv_std

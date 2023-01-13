@@ -1,8 +1,8 @@
 from ._allegro import Allegro_Module
 from ._edgewise import EdgewiseEnergySum, EdgewiseReduce
 from ._fc import ScalarMLP, ScalarMLPFunction
-from ._norm_basis import NormalizedBasis
-from ._typeembed import EdgeEmbedding
+from ._norm_basis import NormalizedBasis, BesselBasis
+from ._edgeembed import EdgeEmbedding
 from ._misc import ScalarMultiply
 
 __all__ = [
@@ -13,5 +13,6 @@ __all__ = [
     ScalarMLPFunction,
     NormalizedBasis,
     EdgeEmbedding,
+    BesselBasis,
     ScalarMultiply,
 ]

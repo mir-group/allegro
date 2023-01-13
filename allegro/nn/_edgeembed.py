@@ -1,16 +1,16 @@
+from typing import Tuple
 import math
 
 import torch
 
 from e3nn import o3
-from e3nn.util.jit import compile_mode
+from e3nn.util.jit import compile_mode, compile
 
 from nequip.data import AtomicDataDict
 from nequip.nn import GraphModuleMixin
-from nequip.nn.radial_basis import BesselBasis
 from nequip.nn.cutoffs import PolynomialCutoff
 
-from ._fc import ScalarMLPFunction
+from ._norm_basis import BesselBasis
 
 
 @compile_mode("script")
@@ -57,8 +57,10 @@ class EdgeEmbedding(GraphModuleMixin, torch.nn.Module):
                 self.type_embeddings.normal_()
             else:
                 raise NotImplementedError
-        self.basis = basis(**basis_kwargs)
-        self.cutoff = cutoff(**cutoff_kwargs)
+
+        self.basis = compile(basis(**basis_kwargs))
+        self.cutoff = compile(cutoff(**cutoff_kwargs))
+
         self.irreps_out[AtomicDataDict.EDGE_EMBEDDING_KEY] = o3.Irreps(
             [
                 (
@@ -72,11 +74,6 @@ class EdgeEmbedding(GraphModuleMixin, torch.nn.Module):
                 )
             ]
         )
-        self.embed_basis = ScalarMLPFunction(
-            mlp_input_dimension=self.basis.num_basis,
-            mlp_latent_dimensions=[],
-            mlp_output_dimension=self.basis.num_basis,
-        )
 
     def forward(self, data: AtomicDataDict.Type) -> AtomicDataDict.Type:
         data = AtomicDataDict.with_edge_vectors(data, with_lengths=True)
@@ -85,31 +82,27 @@ class EdgeEmbedding(GraphModuleMixin, torch.nn.Module):
             data[AtomicDataDict.EDGE_INDEX_KEY][0],
             data[AtomicDataDict.EDGE_INDEX_KEY][1],
         )
+        # embed types
+        cutoff = self.cutoff(edge_length)
+        basis = self.basis(edge_length)
         atom_types = data[AtomicDataDict.ATOM_TYPE_KEY].squeeze(-1)
-        basis = self.embed_basis(self.basis(edge_length))
+        to_cat: Tuple[torch.Tensor]
         if self.type_embedding_mode == "cat":
-            edge_embed = torch.cat(
-                (
-                    basis,
-                    self.type_embeddings[0, atom_types[edge_center]],
-                    self.type_embeddings[1, atom_types[edge_neighbor]],
-                ),
-                dim=-1,
+            to_cat = (
+                basis,
+                self.type_embeddings[0, atom_types[edge_center]],
+                self.type_embeddings[1, atom_types[edge_neighbor]],
             )
         elif self.type_embedding_mode == "prod":
-            edge_embed = torch.cat(
-                (
-                    basis,
-                    self.type_embeddings[
-                        atom_types[edge_center], atom_types[edge_neighbor]
-                    ],
-                ),
-                dim=-1,
+            to_cat = (
+                basis,
+                self.type_embeddings[
+                    atom_types[edge_center], atom_types[edge_neighbor]
+                ],
             )
         else:
             assert False
-        edge_embed = edge_embed * self.cutoff(
-            data[AtomicDataDict.EDGE_LENGTH_KEY]
-        ).unsqueeze(-1)
-        data[AtomicDataDict.EDGE_EMBEDDING_KEY] = edge_embed
+        data[AtomicDataDict.EDGE_EMBEDDING_KEY] = torch.cat(
+            to_cat, dim=-1
+        ) * cutoff.unsqueeze(-1)
         return data
