@@ -6,13 +6,13 @@ from e3nn import o3
 from nequip.data import AtomicDataDict, AtomicDataset
 
 from nequip.nn import SequentialGraphNetwork, AtomwiseReduce
-from nequip.nn.radial_basis import BesselBasis
 
 from nequip.nn.embedding import SphericalHarmonicEdgeAttrs
 
 from allegro.nn import (
     NormalizedBasis,
     EdgeEmbedding,
+    BesselBasis,
     EdgewiseEnergySum,
     Allegro_Module,
     ScalarMLP,
