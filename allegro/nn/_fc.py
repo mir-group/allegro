@@ -73,7 +73,7 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
         mlp_latent_dimensions: List[int],
         mlp_output_dimension: Optional[int],
         mlp_nonlinearity: Optional[str] = "silu",
-        mlp_initialization: str = "normal",
+        mlp_initialization: str = "uniform",
         mlp_bias: bool = False,
     ):
         super().__init__()
