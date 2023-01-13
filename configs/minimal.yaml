@@ -29,7 +29,7 @@ num_layers: 2
 env_embed_multiplicity: 32
 two_body_latent_mlp_latent_dimensions: [32, 64]
 two_body_latent_mlp_nonlinearity: silu
-num_bessels_per_basis: 8
+bessel_frequency_cutoff: 4  # Angstrom^-1
 num_bases: 8
 
 latent_mlp_latent_dimensions: [64]

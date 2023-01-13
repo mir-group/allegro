@@ -1,3 +1,5 @@
+from typing import Optional
+
 import math
 
 import torch
@@ -11,7 +13,8 @@ class BesselBasis(torch.nn.Module):
     def __init__(
         self,
         r_max: float,
-        num_bessels_per_basis: int = 8,
+        bessel_frequency_cutoff: Optional[float] = None,
+        num_bessels_per_basis: Optional[int] = None,
         num_bases: int = 1,
         trainable: bool = True,
     ):
@@ -32,13 +35,22 @@ class BesselBasis(torch.nn.Module):
         super().__init__()
 
         self.trainable = trainable
+        self.r_max = float(r_max)
         self.num_bases = num_bases
         assert num_bases >= 1
         if num_bases > 1:
             assert trainable
+        if bessel_frequency_cutoff is not None:
+            assert num_bessels_per_basis is None
+            # max freq is n pi / r_max
+            # => n = (r_max / pi) * bessel_frequency_cutoff
+            num_bessels_per_basis = int(
+                math.ceil((self.r_max * bessel_frequency_cutoff) / math.pi)
+            )
+            # ^ ceil to ensure at least some basis functions
+        assert num_bessels_per_basis is not None
         self.num_bessels_per_basis = num_bessels_per_basis
         self.num_basis = num_bessels_per_basis * num_bases
-        self.r_max = float(r_max)
         self.prefactor = math.sqrt(2.0 / self.r_max)
 
         bessel_weights = (
