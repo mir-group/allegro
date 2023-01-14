@@ -77,6 +77,7 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
         mlp_bias: bool = False,
     ):
         super().__init__()
+        assert not mlp_bias  # guard against accidents
         nonlinearity = {
             None: None,
             "silu": torch.nn.functional.silu,
