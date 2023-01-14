@@ -6,6 +6,8 @@ from nequip.utils.unittests.model_tests import BaseEnergyModelTests
 COMMON_CONFIG = {
     "avg_num_neighbors": 5.0,  # very approximate to keep numerics sane
     "r_max": 4,
+    "num_bessels_per_basis": 4,
+    "num_bases": 4,
     "num_types": 3,
     "types_names": ["H", "C", "O"],
     "env_embed_multiplicity": 4,
