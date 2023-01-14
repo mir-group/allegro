@@ -21,6 +21,10 @@ class EdgeEmbedding(GraphModuleMixin, torch.nn.Module):
         type_embedding_dim: int,
         basis=BesselBasis,
         basis_kwargs={},
+        basis_mlp=ScalarMLPFunction,
+        basis_mlp_kwargs={},
+        typexbasis_mlp=ScalarMLPFunction,
+        typexbasis_mlp_kwargs={},
         cutoff=PolynomialCutoff,
         cutoff_kwargs={},
         irreps_in=None,
@@ -36,15 +40,17 @@ class EdgeEmbedding(GraphModuleMixin, torch.nn.Module):
         self.cutoff = compile(cutoff(**cutoff_kwargs))
 
         full_emb_dim = type_embedding_dim * 2
-        self.basis_embed = ScalarMLPFunction(
+        opts = dict(mlp_latent_dimensions=[])
+        opts.update(basis_mlp_kwargs)
+        self.basis_mlp = basis_mlp(
             mlp_input_dimension=self.basis.num_basis,
             mlp_output_dimension=full_emb_dim,
-            mlp_latent_dimensions=[],
+            **opts,
         )
-        self.final_embed = ScalarMLPFunction(
-            mlp_input_dimension=full_emb_dim,
-            mlp_output_dimension=full_emb_dim,
-            mlp_latent_dimensions=[],
+        opts = dict(mlp_latent_dimensions=[])
+        opts.update(typexbasis_mlp_kwargs)
+        self.typexbasis_mlp = typexbasis_mlp(
+            mlp_input_dimension=full_emb_dim, mlp_output_dimension=full_emb_dim, **opts
         )
 
         self.irreps_out[AtomicDataDict.EDGE_EMBEDDING_KEY] = o3.Irreps(
@@ -74,8 +80,8 @@ class EdgeEmbedding(GraphModuleMixin, torch.nn.Module):
             ),
             dim=-1,
         )
-        basis = self.basis_embed(basis)
-        edge_embed = self.final_embed(type_embed * basis)
+        basis = self.basis_mlp(basis)
+        edge_embed = self.typexbasis_mlp(type_embed * basis)
 
         data[AtomicDataDict.EDGE_EMBEDDING_KEY] = edge_embed * cutoff.unsqueeze(-1)
         return data
