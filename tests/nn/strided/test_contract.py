@@ -23,7 +23,6 @@ from allegro.nn._strided import Contracter
         ("p", 3, 3, 3),
     ],
 )
-@pytest.mark.parametrize("sparse", [None])  # , "coo"])  # TODO: csr
 @pytest.mark.parametrize("pad", [1, 2, 4])
 @pytest.mark.parametrize("shared_weights", [False, True])
 def test_contract(
@@ -34,7 +33,6 @@ def test_contract(
     mul1,
     mul2,
     mulout,
-    sparse,
     pad,
     shared_weights,
 ):
@@ -57,7 +55,6 @@ def test_contract(
         connection_mode=mode,
         shared_weights=shared_weights,
         internal_weights=shared_weights,
-        sparse_mode=None,
         pad_to_alignment=1,
     )
     c_opt_mod = Contracter(
@@ -69,7 +66,6 @@ def test_contract(
         connection_mode=mode,
         shared_weights=shared_weights,
         internal_weights=shared_weights,
-        sparse_mode=sparse,
         pad_to_alignment=pad,
     )
     if shared_weights:
@@ -155,7 +151,6 @@ def _strided_to_cat(irreps, mul, x):
         ("uvv", 1, 8, 8),
     ],
 )
-@pytest.mark.parametrize("sparse", [None])  # , "coo"])
 @pytest.mark.parametrize("pad", [1, 2, 4])
 @pytest.mark.parametrize("shared_weights", [False, True])
 def test_like_tp(
@@ -166,7 +161,6 @@ def test_like_tp(
     mul1,
     mul2,
     mulout,
-    sparse,
     pad,
     shared_weights,
 ):
@@ -191,7 +185,6 @@ def test_like_tp(
         connection_mode=mode,
         shared_weights=shared_weights,
         internal_weights=shared_weights,
-        sparse_mode=sparse,
         pad_to_alignment=pad,
     )
     batchdim = 7

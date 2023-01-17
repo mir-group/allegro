@@ -63,7 +63,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         latent_out_field: Optional[str] = _keys.EDGE_FEATURES,
         # Performance parameters:
         pad_to_alignment: int = 1,
-        sparse_mode: Optional[str] = None,
         # Other:
         irreps_in=None,
     ):
@@ -275,7 +274,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 has_weight=internal_weight_tp,
                 internal_weights=internal_weight_tp,
                 pad_to_alignment=pad_to_alignment,
-                sparse_mode=sparse_mode,
             )
             self.tps.append(tp)
             # we extract the scalars from the first irrep of the tp
