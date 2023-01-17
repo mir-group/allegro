@@ -12,7 +12,6 @@ from e3nn.o3 import Instruction
 from opt_einsum_fx import jitable, optimize_einsums, EfficientShapeProp
 
 from ._layout import StridedLayout
-from ._spmm import ExplicitGradSpmm
 
 
 def codegen_strided_tensor_product_forward(
@@ -27,7 +26,6 @@ def codegen_strided_tensor_product_forward(
     shared_weights: bool = False,
     internal_weights: bool = False,
     specialized_code: bool = True,
-    sparse_mode: Optional[str] = None,
     pad_to_alignment: int = 1,
 ) -> Optional[fx.GraphModule]:
     """Returns None if strided doesn't make sense for this TP."""
@@ -171,36 +169,27 @@ def codegen_strided_tensor_product_forward(
             ),
         )
 
-    # TODO: support use of sparse w3j
-    if sparse_mode is None:
-        # in dense, must shape it for einsum:
-        if w3j_is_ij_diagonal:
-            kij_shape = (
-                layout_out.base_dim,
-                layout_in1.base_dim,
-            )
-        else:
-            kij_shape = (
-                layout_out.base_dim,
-                layout_in1.base_dim,
-                layout_in2.base_dim,
-            )
-        w3j = (
-            w3j.to_dense()
-            .reshape(((num_paths,) if num_paths > 1 else tuple()) + kij_shape)
-            .contiguous()
+    # in dense, must shape it for einsum:
+    if w3j_is_ij_diagonal:
+        kij_shape = (
+            layout_out.base_dim,
+            layout_in1.base_dim,
         )
-        del kij_shape
-    elif sparse_mode == "coo":
-        w3j = w3j.coalesce()
-    elif sparse_mode == "csr":
-        w3j = w3j.coalesce().to_sparse_csr()
     else:
-        raise ValueError
+        kij_shape = (
+            layout_out.base_dim,
+            layout_in1.base_dim,
+            layout_in2.base_dim,
+        )
+    w3j = (
+        w3j.to_dense()
+        .reshape(((num_paths,) if num_paths > 1 else tuple()) + kij_shape)
+        .contiguous()
+    )
+    del kij_shape
 
     # Generate the mixer
     u, v, w = "uuu" if connection_mode == "p" else connection_mode
-    uv = {"uv": "uv", "uu": "u", "p": None}[connection_mode[:2]]
     if has_weight:
         weight_label = {"uvw": "uvw", "uuu": "u", "uvv": "uv", "p": ""}[connection_mode]
 
@@ -242,8 +231,7 @@ def codegen_strided_tensor_product_forward(
             ws_out = Proxy(graph_out.placeholder("w", torch.Tensor))
             ws_out = ws_out.reshape(weight_shape)
 
-    if sparse_mode is None:
-        w3j_proxy = Proxy(graph_out.get_attr("_big_w3j"))
+    w3j_proxy = Proxy(graph_out.get_attr("_big_w3j"))
 
     # convert to strided
     x1s_out = x1s_out.reshape(-1, layout_in1.mul, layout_in1.base_dim)
@@ -255,81 +243,31 @@ def codegen_strided_tensor_product_forward(
     ij = "i" if w3j_is_ij_diagonal else "ij"
     if has_weight:
         p = "p" if num_paths > 1 else ""
-        if sparse_mode is None:
-            if shared_weights:
-                # for shared weights, we can precontract weights and w3j so they can be frozen together
-                # this is usually advantageous for inference, since the weights would have to be
-                # multiplied in anyway at some point
-                ww3j_proxy = torch.einsum(
-                    f"{weight_label},{p}k{ij}->{weight_label.rstrip('p')}k{ij}",
-                    ws_out,
-                    w3j_proxy,
-                )
-                # we use minimal opt_einsum_fx later without einsum fusion, so this is safe
-                out = torch.einsum(
-                    f"z{u}i,z{v}{j},{weight_label.rstrip('p')}k{ij}->z{w}k",
-                    x1s_out,
-                    x2s_out,
-                    ww3j_proxy,
-                )
-            else:
-                # use einsum for the full contract
-                einstr = f"{z}{weight_label},z{u}i,z{v}{j},{p}k{ij}->z{w}k"
-                out = torch.einsum(einstr, ws_out, x1s_out, x2s_out, w3j_proxy)
-        else:
-            outer = torch.einsum(f"z{u}i,z{v}{j}->z{uv}{ij}", x1s_out, x2s_out)
-            # \/ has shape [pk][ij] * [ij][zuv] = [pk][zuv]
-            contracted = Proxy(
-                graph_out.call_module(
-                    "_w3j_mm",
-                    (
-                        outer.reshape(
-                            -1,
-                            (
-                                layout_in1.base_dim
-                                if w3j_is_ij_diagonal
-                                else layout_in1.base_dim * layout_in2.base_dim
-                            ),
-                        ).T.node,
-                    ),
-                )
-            ).T.reshape(
-                (-1,)
-                + {"uv": (layout_in1.mul, layout_in2.mul), "uu": (layout_in1.mul,)}[
-                    connection_mode[:2]
-                ]
-                + (num_paths, layout_out.base_dim)
+
+        if shared_weights:
+            # for shared weights, we can precontract weights and w3j so they can be frozen together
+            # this is usually advantageous for inference, since the weights would have to be
+            # multiplied in anyway at some point
+            ww3j_proxy = torch.einsum(
+                f"{weight_label},{p}k{ij}->{weight_label.rstrip('p')}k{ij}",
+                ws_out,
+                w3j_proxy,
             )
-            out = torch.einsum(f"z{uv}pk,{z}{weight_label}->z{w}k", contracted, ws_out)
-    else:
-        if sparse_mode is None:
+            # we use minimal opt_einsum_fx later without einsum fusion, so this is safe
+            out = torch.einsum(
+                f"z{u}i,z{v}{j},{weight_label.rstrip('p')}k{ij}->z{w}k",
+                x1s_out,
+                x2s_out,
+                ww3j_proxy,
+            )
+        else:
             # use einsum for the full contract
-            einstr = f"z{u}i,z{v}{j},{'p' if num_paths > 1 else ''}k{ij}->z{w}k"
-            out = torch.einsum(einstr, x1s_out, x2s_out, w3j_proxy)
-        else:
-            outer = torch.einsum(f"z{u}i,z{v}{j}->z{uv}{ij}", x1s_out, x2s_out)
-            # \/ has shape [k][ij] * [ij][zuv] = [pk][zuv]
-            out = Proxy(
-                graph_out.call_module(
-                    "_w3j_mm",
-                    (
-                        outer.reshape(
-                            -1,
-                            (
-                                layout_in1.base_dim
-                                if w3j_is_ij_diagonal
-                                else layout_in1.base_dim * layout_in2.base_dim
-                            ),
-                        ).T.node,
-                    ),
-                )
-            ).T.reshape(
-                (
-                    -1,
-                    layout_in1.mul,  # its only uuu for now
-                    layout_out.base_dim,
-                )
-            )
+            einstr = f"{z}{weight_label},z{u}i,z{v}{j},{p}k{ij}->z{w}k"
+            out = torch.einsum(einstr, ws_out, x1s_out, x2s_out, w3j_proxy)
+    else:
+        # use einsum for the full contract
+        einstr = f"z{u}i,z{v}{j},{'p' if num_paths > 1 else ''}k{ij}->z{w}k"
+        out = torch.einsum(einstr, x1s_out, x2s_out, w3j_proxy)
 
     graph_out.output(out.node)
 
@@ -338,8 +276,6 @@ def codegen_strided_tensor_product_forward(
 
     # Make GraphModules
     base_module.register_buffer("_big_w3j", w3j)
-    if sparse_mode is not None:
-        base_module._w3j_mm = ExplicitGradSpmm(w3j)
     graphmod_out = fx.GraphModule(base_module, graph_out, class_name="tp_forward")
 
     if True:  # optimize_einsums
@@ -408,7 +344,6 @@ def Contracter(
     pad_to_alignment: int = 1,
     shared_weights: bool = False,
     internal_weights: bool = False,
-    sparse_mode: Optional[str] = None,
 ):
     irreps_in1 = o3.Irreps(irreps_in1)
     assert all(mul == irreps_in1[0].mul for mul, ir in irreps_in1)
@@ -453,13 +388,11 @@ def Contracter(
         ],
         shared_weights=shared_weights,
         internal_weights=internal_weights,
-        sparse_mode=sparse_mode,
         pad_to_alignment=pad_to_alignment,
     )
     if mod is None:
         raise ValueError("Couldn't use strided for given layout")
-    if sparse_mode is None:
-        mod = compile(mod)
+    mod = compile(mod)
     return mod
 
 
