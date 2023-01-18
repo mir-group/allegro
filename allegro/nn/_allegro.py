@@ -408,6 +408,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         :return: AtomicDataDict.Type
         """
         edge_center = data[AtomicDataDict.EDGE_INDEX_KEY][0]
+        num_atoms: int = len(data[AtomicDataDict.POSITIONS_KEY])
 
         edge_attr = data[self.field]
         # pad edge_attr
@@ -499,9 +500,10 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 env_w_edges,
                 edge_center,
                 dim=0,
+                dim_size=num_atoms,
             )
             # make it per edge
-            local_env_per_edge = local_env_per_edge[edge_center]
+            local_env_per_edge = torch.index_select(local_env_per_edge, 0, edge_center)
 
             if not self.self_tensor_product:
                 # subtract out the current edge from each env sum
