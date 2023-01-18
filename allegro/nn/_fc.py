@@ -15,6 +15,8 @@ from nequip.data import AtomicDataDict
 from nequip.nn import GraphModuleMixin
 from nequip.nn.nonlinearities import ShiftedSoftPlus
 
+from ._misc import _init_weight
+
 
 @compile_mode("script")
 class ScalarMLP(GraphModuleMixin, torch.nn.Module):
@@ -112,20 +114,7 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
         # make weights
         for layer, (h_in, h_out) in enumerate(zip(dimensions, dimensions[1:])):
             w = torch.empty(h_in, h_out)
-
-            if mlp_initialization == "normal":
-                w.normal_()
-            elif mlp_initialization == "uniform":
-                # these values give < x^2 > = 1
-                w.uniform_(-math.sqrt(3), math.sqrt(3))
-            elif mlp_initialization == "orthogonal":
-                # this rescaling gives < x^2 > = 1
-                torch.nn.init.orthogonal_(w, gain=math.sqrt(max(w.shape)))
-            else:
-                raise NotImplementedError(
-                    f"Invalid mlp_initialization {mlp_initialization}"
-                )
-
+            _init_weight(w, mlp_initialization, allow_orthogonal=True)
             params[f"_weight_{layer}"] = w
             if mlp_bias:
                 params[f"_bias_{layer}"] = torch.zeros(1, h_out)
