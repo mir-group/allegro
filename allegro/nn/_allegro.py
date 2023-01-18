@@ -50,6 +50,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         nonscalars_include_parity: bool = True,
         self_tensor_product: bool = False,
         internal_weight_tp: Union[bool, str] = False,
+        tensor_track_weight_init: str = "uniform",
         # MLP parameters:
         two_body_latent=ScalarMLPFunction,
         two_body_latent_kwargs={},
@@ -227,6 +228,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                         [(env_embed_multiplicity, ir) for _, ir in env_embed_irreps],
                         shared_weights=True,
                         internal_weights=True,
+                        initialization=tensor_track_weight_init,
                         alpha=env_linear_alpha,
                     )
                 )
@@ -273,6 +275,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 shared_weights=internal_weight_tp,
                 has_weight=internal_weight_tp,
                 internal_weights=internal_weight_tp,
+                initialization=tensor_track_weight_init,
                 pad_to_alignment=pad_to_alignment,
             )
             self.tps.append(tp)
@@ -296,6 +299,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                     [(env_embed_multiplicity, ir) for _, ir in out_irreps],
                     shared_weights=True,
                     internal_weights=True,
+                    initialization=tensor_track_weight_init,
                     pad_to_alignment=pad_to_alignment,
                 )
                 if not internal_weight_tp
