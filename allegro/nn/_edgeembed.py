@@ -74,10 +74,6 @@ class EdgeEmbedding(GraphModuleMixin, torch.nn.Module):
     def forward(self, data: AtomicDataDict.Type) -> AtomicDataDict.Type:
         data = AtomicDataDict.with_edge_vectors(data, with_lengths=True)
         edge_length = data[AtomicDataDict.EDGE_LENGTH_KEY]
-        edge_center, edge_neighbor = (
-            data[AtomicDataDict.EDGE_INDEX_KEY][0],
-            data[AtomicDataDict.EDGE_INDEX_KEY][1],
-        )
         # embed types
         cutoff = self.cutoff(edge_length)
         basis = self.basis(edge_length)
@@ -85,7 +81,7 @@ class EdgeEmbedding(GraphModuleMixin, torch.nn.Module):
         atom_types = data[AtomicDataDict.ATOM_TYPE_KEY].squeeze(-1)
 
         edge_types = torch.index_select(
-            atom_types, 0, data[AtomicDataDict.EDGE_INDEX_KEY].view(-1)
+            atom_types, 0, data[AtomicDataDict.EDGE_INDEX_KEY].reshape(-1)
         ).view(2, -1)
         center_types = edge_types[0]
         neighbor_types = edge_types[1]
