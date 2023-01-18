@@ -83,22 +83,32 @@ class EdgeEmbedding(GraphModuleMixin, torch.nn.Module):
         basis = self.basis(edge_length)
         basis = self.basis_mlp(basis)
         atom_types = data[AtomicDataDict.ATOM_TYPE_KEY].squeeze(-1)
+
+        edge_types = torch.index_select(
+            atom_types, 0, data[AtomicDataDict.EDGE_INDEX_KEY].view(-1)
+        ).view(2, -1)
+        center_types = edge_types[0]
+        neighbor_types = edge_types[1]
+        center_embed = torch.index_select(
+            self.type_embeddings[0],
+            0,
+            center_types,
+        )
+        neighbor_embed = torch.index_select(
+            self.type_embeddings[0],
+            0,
+            neighbor_types,
+        )
+
         if self._embed_prod:
             type_embed = torch.cat(
-                (
-                    self.type_embeddings[0, atom_types[edge_center]],
-                    self.type_embeddings[1, atom_types[edge_neighbor]],
-                ),
+                (center_embed, neighbor_embed),
                 dim=-1,
             )
             edge_embed = self.typexbasis_mlp(type_embed * basis)
         else:
             edge_embed = torch.cat(
-                (
-                    basis,
-                    self.type_embeddings[0, atom_types[edge_center]],
-                    self.type_embeddings[1, atom_types[edge_neighbor]],
-                ),
+                (basis, center_embed, neighbor_embed),
                 dim=-1,
             )
             edge_embed = self.typexbasis_mlp(edge_embed)
