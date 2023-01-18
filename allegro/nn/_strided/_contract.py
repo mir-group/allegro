@@ -12,6 +12,7 @@ from e3nn.o3 import Instruction
 from opt_einsum_fx import jitable, optimize_einsums, EfficientShapeProp
 
 from ._layout import StridedLayout
+from .._misc import _init_weight
 
 
 def codegen_strided_tensor_product_forward(
@@ -25,6 +26,7 @@ def codegen_strided_tensor_product_forward(
     normalization: str = "component",
     shared_weights: bool = False,
     internal_weights: bool = False,
+    initialization: str = "uniform",
     specialized_code: bool = True,
     pad_to_alignment: int = 1,
 ) -> Optional[fx.GraphModule]:
@@ -227,6 +229,7 @@ def codegen_strided_tensor_product_forward(
         if internal_weights:
             ws_out = Proxy(graph_out.get_attr("w", torch.Tensor))
             base_module.w = torch.nn.Parameter(torch.randn(weight_shape))
+            _init_weight(base_module.w, initialization=initialization)
         else:
             ws_out = Proxy(graph_out.placeholder("w", torch.Tensor))
             ws_out = ws_out.reshape(weight_shape)
@@ -344,6 +347,7 @@ def Contracter(
     pad_to_alignment: int = 1,
     shared_weights: bool = False,
     internal_weights: bool = False,
+    initialization: str = "uniform",
 ):
     irreps_in1 = o3.Irreps(irreps_in1)
     assert all(mul == irreps_in1[0].mul for mul, ir in irreps_in1)
@@ -388,6 +392,7 @@ def Contracter(
         ],
         shared_weights=shared_weights,
         internal_weights=internal_weights,
+        initialization=initialization,
         pad_to_alignment=pad_to_alignment,
     )
     if mod is None:

@@ -11,6 +11,7 @@ from e3nn.o3._tensor_product._codegen import _sum_tensors
 from opt_einsum_fx import jitable, optimize_einsums_full
 
 from ._layout import StridedLayout
+from .._misc import _init_weight
 
 
 class Instruction(NamedTuple):
@@ -25,6 +26,7 @@ def codegen_strided_linear(
     normalization: str = "component",
     internal_weights: bool = False,
     shared_weights: bool = False,
+    initialization: str = "uniform",
     pad_to_alignment: int = 1,
     alpha: float = 1.0,
 ) -> Optional[fx.GraphModule]:
@@ -164,6 +166,7 @@ def codegen_strided_linear(
     constants_root = torch.nn.Module()
     if internal_weights:
         constants_root.w = torch.nn.Parameter(torch.randn(w_index))
+        _init_weight(constants_root.w, initialization=initialization)
     graphmod_out = fx.GraphModule(
         constants_root, graph_out, class_name="linear_forward"
     )
@@ -212,6 +215,7 @@ def Linear(
     irreps_out,
     shared_weights: Optional[bool] = None,
     internal_weights: bool = False,
+    initialization: str = "uniform",
     instructions: Optional[List[Tuple[int, int]]] = None,
     pad_to_alignment: int = 1,
     alpha: float = 1.0,
@@ -237,6 +241,7 @@ def Linear(
         instructions=instructions,
         shared_weights=shared_weights,
         internal_weights=internal_weights,
+        initialization=initialization,
         pad_to_alignment=pad_to_alignment,
         alpha=alpha,
     )
