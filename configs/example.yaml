@@ -40,6 +40,8 @@ avg_num_neighbors: auto
 # radial basis
 # set true to train the bessel roots
 BesselBasis_trainable: true
+bessel_frequency_cutoff: 4  # Angstrom^-1
+num_bases: 8
 
 # p-parameter in envelope function, as proposed in Klicpera, J. et al., arXiv:2003.03123 
 # sets it BOTH for the RadialBasisProjection AND the Allegro_Module
