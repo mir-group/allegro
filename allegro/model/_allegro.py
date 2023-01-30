@@ -40,15 +40,24 @@ def Allegro(config, initialize: bool, dataset: Optional[AtomicDataset] = None):
                 l_max, p=(1 if parity_setting == "so3" else -1)
             )
         )
-        nonscalars_include_parity = parity_setting == "o3_full"
+        # set tensor_track_allowed_irreps
+        # note that it is treated as a set, so order doesn't really matter
+        if parity_setting == "o3_full":
+            # we want all irreps up to lmax
+            tensor_track_allowed_irreps = o3.Irreps(
+                [(1, (this_l, p)) for this_l in range(l_max + 1) for p in (1, -1)]
+            )
+        else:
+            # for so3 or o3_restricted, we want only irreps that show up in the original SH
+            tensor_track_allowed_irreps = irreps_edge_sh
         # check consistant
         assert config.get("irreps_edge_sh", irreps_edge_sh) == irreps_edge_sh
         assert (
-            config.get("nonscalars_include_parity", nonscalars_include_parity)
-            == nonscalars_include_parity
+            config.get("tensor_track_allowed_irreps", tensor_track_allowed_irreps)
+            == tensor_track_allowed_irreps
         )
         config["irreps_edge_sh"] = irreps_edge_sh
-        config["nonscalars_include_parity"] = nonscalars_include_parity
+        config["tensor_track_allowed_irreps"] = tensor_track_allowed_irreps
 
     layers = {
         # -- Encode --
@@ -68,7 +77,7 @@ def Allegro(config, initialize: bool, dataset: Optional[AtomicDataset] = None):
                 ),
             ),
         ),
-        # Get edge nonscalars
+        # Get edge tensors
         "spharm": SphericalHarmonicEdgeAttrs,
         # The core allegro model:
         "allegro": (

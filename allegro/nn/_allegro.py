@@ -42,11 +42,11 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         num_types: int,
         r_max: float,
         num_tensor_features: int,
+        tensor_track_allowed_irreps: o3.Irreps,
         avg_num_neighbors: Optional[float] = None,
         # optional hyperparameters:
         field: str = AtomicDataDict.EDGE_ATTRS_KEY,
         edge_invariant_field: str = AtomicDataDict.EDGE_EMBEDDING_KEY,
-        nonscalars_include_parity: bool = True,
         self_edge_tensor_product: bool = False,
         tensors_mixing_mode: str = "uuulin",
         tensor_track_weight_init: str = "uniform",
@@ -74,7 +74,8 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             num_layers >= 1
         )  # zero layers is "two body", but we don't need to support that fallback case
         self.num_layers = num_layers
-        self.nonscalars_include_parity = nonscalars_include_parity
+        self.tensor_track_allowed_irreps = o3.Irreps(tensor_track_allowed_irreps)
+        assert set(mul for mul, ir in self.tensor_track_allowed_irreps) == {1}
         self.field = field
         self.latent_out_field = latent_out_field
         self.edge_invariant_field = edge_invariant_field
@@ -135,27 +136,15 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         tps_irreps = [arg_irreps]
 
         for layer_idx in range(num_layers):
-            # Create higher order terms cause there are more TPs coming
-            if layer_idx == 0:
-                # Add parity irreps
-                ir_out = []
-                for (mul, ir) in env_embed_irreps:
-                    if self.nonscalars_include_parity:
-                        # add both parity options
-                        ir_out.append((1, (ir.l, 1)))
-                        ir_out.append((1, (ir.l, -1)))
-                    else:
-                        # add only the parity option seen in the inputs
-                        ir_out.append((1, ir))
-
-                ir_out = o3.Irreps(ir_out)
-
             if layer_idx == self.num_layers - 1:
                 # ^ means we're doing the last layer
                 # No more TPs follow this, so only need scalars
                 ir_out = o3.Irreps([(1, (0, 1))])
+            else:
+                # allow everything allowed
+                ir_out = self.tensor_track_allowed_irreps
 
-            # Prune impossible paths
+            # Prune impossible paths, leaving only allowed irreps that can be constructed:
             ir_out = o3.Irreps(
                 [
                     (mul, ir)
@@ -167,6 +156,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             # the argument to the next tensor product is the output of this one
             arg_irreps = ir_out
             tps_irreps.append(ir_out)
+        del ir_out, layer_idx, arg_irreps
         # - end build irreps -
 
         # == Remove unneeded paths ==
@@ -187,7 +177,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
 
         assert len(new_tps_irreps) == len(tps_irreps)
         tps_irreps = list(reversed(new_tps_irreps))
-        del new_tps_irreps
+        del new_tps_irreps, new_arg_irreps, arg_irreps
 
         assert tps_irreps[-1].lmax == 0
 
@@ -228,6 +218,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                                 full_out_irreps.append((num_tensor_features, ir_out))
                                 tmp_i_out += 1
             full_out_irreps = o3.Irreps(full_out_irreps)
+            del tmp_i_out
             self._n_scalar_outs.append(n_scalar_outs)
             assert all(ir == SCALAR for _, ir in full_out_irreps[:n_scalar_outs])
             tp = Contracter(
@@ -249,6 +240,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 pad_to_alignment=pad_to_alignment,
             )
             self.tps.append(tp)
+            del tp
             # we extract the scalars from the first irrep of the tp
             assert out_irreps[0].ir == SCALAR
 
@@ -321,9 +313,10 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                     mlp_output_dimension=generate_n_weights,
                 )
             )
+            del generate_n_weights
 
         # For the final layer, we specialize:
-        # we don't need to propagate nonscalars, so there is no TP
+        # we don't need to propagate tensors, so there is no TP
         # thus we only need the latent:
         self.final_latent = latent(
             mlp_input_dimension=(
@@ -349,6 +342,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 avg_num_neighbors - (0 if self.self_edge_tensor_product else 1)
             )
         self._env_sum_constant = env_sum_constant
+        del env_sum_constant
 
         # - layer resnet update weights -
         if latent_resnet_coefficients is None:
