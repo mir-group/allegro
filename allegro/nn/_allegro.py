@@ -1,4 +1,4 @@
-from typing import Optional, List, Union
+from typing import Optional, List
 import math
 import functools
 
@@ -24,10 +24,10 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
     field: str
     out_field: str
     num_types: int
-    env_embed_mul: int
+    num_tensor_features: int
     weight_numel: int
     latent_resnet: bool
-    self_tensor_product: bool
+    self_edge_tensor_product: bool
 
     # internal values
     _env_builder_w_index: List[int]
@@ -37,18 +37,18 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
 
     def __init__(
         self,
-        # required params
+        # required hyperparameters:
         num_layers: int,
         num_types: int,
         r_max: float,
+        num_tensor_features: int,
         avg_num_neighbors: Optional[float] = None,
-        # general hyperparameters:
+        # optional hyperparameters:
         field: str = AtomicDataDict.EDGE_ATTRS_KEY,
         edge_invariant_field: str = AtomicDataDict.EDGE_EMBEDDING_KEY,
-        env_embed_multiplicity: int = 32,
         nonscalars_include_parity: bool = True,
-        self_tensor_product: bool = False,
-        internal_weight_tp: Union[bool, str] = False,
+        self_edge_tensor_product: bool = False,
+        tensors_mixing_mode: str = "uuulin",
         tensor_track_weight_init: str = "uniform",
         # MLP parameters:
         two_body_latent=ScalarMLPFunction,
@@ -79,16 +79,16 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         self.latent_out_field = latent_out_field
         self.edge_invariant_field = edge_invariant_field
         self.latent_resnet = latent_resnet
-        self.env_embed_mul = env_embed_multiplicity
+        self.num_tensor_features = num_tensor_features
         self.avg_num_neighbors = avg_num_neighbors
         self.num_types = num_types
-        self.self_tensor_product = self_tensor_product
+        self.self_edge_tensor_product = self_edge_tensor_product
 
-        internal_weight_tp_mode = (
-            "uuu" if internal_weight_tp is False else internal_weight_tp
+        assert tensors_mixing_mode in ("uuulin", "uuup", "uvvp", "p")
+        tp_tensors_mixing_mode = (
+            "uuu" if tensors_mixing_mode == "uuulin" else tensors_mixing_mode[:-1]
         )
-        internal_weight_tp = bool(internal_weight_tp)
-        self.internal_weight_tp = internal_weight_tp
+        internal_weight_tp = tensors_mixing_mode != "uuulin"
 
         self.register_buffer("r_max", torch.as_tensor(float(r_max)))
         assert not any(
@@ -198,7 +198,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         # Environment builder:
         self._env_weighter = MakeWeightedChannels(
             irreps_in=input_irreps,
-            multiplicity_out=env_embed_multiplicity,
+            multiplicity_out=num_tensor_features,
             pad_to_alignment=pad_to_alignment,
         )
 
@@ -225,23 +225,23 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                                 if ir_out == SCALAR:
                                     n_scalar_outs += 1
                                 instr.append((i_1, i_2, tmp_i_out))
-                                full_out_irreps.append((env_embed_multiplicity, ir_out))
+                                full_out_irreps.append((num_tensor_features, ir_out))
                                 tmp_i_out += 1
             full_out_irreps = o3.Irreps(full_out_irreps)
             self._n_scalar_outs.append(n_scalar_outs)
             assert all(ir == SCALAR for _, ir in full_out_irreps[:n_scalar_outs])
             tp = Contracter(
                 irreps_in1=o3.Irreps(
-                    [(env_embed_multiplicity, ir) for _, ir in arg_irreps]
+                    [(num_tensor_features, ir) for _, ir in arg_irreps]
                 ),
                 irreps_in2=o3.Irreps(
-                    [(env_embed_multiplicity, ir) for _, ir in env_embed_irreps]
+                    [(num_tensor_features, ir) for _, ir in env_embed_irreps]
                 ),
                 irreps_out=o3.Irreps(
-                    [(env_embed_multiplicity, ir) for _, ir in full_out_irreps]
+                    [(num_tensor_features, ir) for _, ir in full_out_irreps]
                 ),
                 instructions=instr,
-                connection_mode=internal_weight_tp_mode,
+                connection_mode=tp_tensors_mixing_mode,
                 shared_weights=internal_weight_tp,
                 has_weight=internal_weight_tp,
                 internal_weights=internal_weight_tp,
@@ -266,7 +266,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             self.linears.append(
                 Linear(
                     full_out_irreps,
-                    [(env_embed_multiplicity, ir) for _, ir in out_irreps],
+                    [(num_tensor_features, ir) for _, ir in out_irreps],
                     shared_weights=True,
                     internal_weights=True,
                     initialization=tensor_track_weight_init,
@@ -307,7 +307,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                                 # to get the n_scalar_out for the previous TP, which are what we are actually integrating:
                                 # in forward(), the `latent` is called _first_ before the TP
                                 # of this layer we are building.
-                                + env_embed_multiplicity * self._n_scalar_outs[-2]
+                                + num_tensor_features * self._n_scalar_outs[-2]
                             )
                         ),
                         mlp_output_dimension=None,
@@ -333,20 +333,20 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             )
             # here we use self._n_scalar_outs[-1] since we haven't appended anything to it
             # so it is still the correct n_scalar_outs for the previous (and last) TP
-            + env_embed_multiplicity * self._n_scalar_outs[-1],
+            + num_tensor_features * self._n_scalar_outs[-1],
             mlp_output_dimension=None,
         )
         # - end build modules -
 
         # - normalization -
         # we divide the env embed sums by sqrt(N) to normalize
-        # note that if self_tensor_product = False, then the number of neighbors being summed is one smaller
+        # note that if self_edge_tensor_product = False, then the number of neighbors being summed is one smaller
         # we optimize for the case where normalization is provided, so we don't switch for
         # the avg_num_neighbors is None case in a special way.
         env_sum_constant = 1.0
         if avg_num_neighbors is not None:
             env_sum_constant = 1.0 / math.sqrt(
-                avg_num_neighbors - (0 if self.self_tensor_product else 1)
+                avg_num_neighbors - (0 if self.self_edge_tensor_product else 1)
             )
         self._env_sum_constant = env_sum_constant
 
@@ -494,7 +494,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             # make it per edge
             local_env_per_edge = torch.index_select(local_env_per_edge, 0, edge_center)
 
-            if not self.self_tensor_product:
+            if not self.self_edge_tensor_product:
                 # subtract out the current edge from each env sum
                 # sum_i{x_i} - x_j = sum_{i != j}{x_i}
                 # this gives for each edge a sum over all _other_ edges sharing the center

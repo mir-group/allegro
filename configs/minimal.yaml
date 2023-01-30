@@ -26,7 +26,7 @@ parity: o3_full
 
 # allegro layers:
 num_layers: 2
-env_embed_multiplicity: 32
+num_tensor_features: 32
 two_body_latent_mlp_latent_dimensions: [32, 64]
 two_body_latent_mlp_nonlinearity: silu
 bessel_frequency_cutoff: 4  # Angstrom^-1

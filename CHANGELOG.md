@@ -11,6 +11,7 @@ Most recent change on the bottom.
 ### Changed
 - Resnet normalization scheme
 - [Breaking] Default `norm_basis_mean_shift` `True` -> `False`
+- [Breaking] Rename `env_embed_mul` -> `num_tensor_features`
 
 ### Fixed
 - `norm_basis_mean_shift=False`
