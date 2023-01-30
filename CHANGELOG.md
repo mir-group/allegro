@@ -16,7 +16,7 @@ Most recent change on the bottom.
 - `norm_basis_mean_shift=False`
 
 ### Removed
-- [Breaking] Hyperparameter `embed_initial_edge`, `cutoff_type`, `per_layer_cutoffs`, `mlp_batchnorm`, `mlp_dropout`
+- [Breaking] Hyperparameter `embed_initial_edge`, `cutoff_type`, `per_layer_cutoffs`, `mlp_batchnorm`, `mlp_dropout`, `per_edge_species_scale`
 
 ## [Unreleased]
 
