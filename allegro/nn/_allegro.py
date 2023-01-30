@@ -15,7 +15,6 @@ from nequip.utils.tp_utils import tp_path_exists
 from ._fc import ScalarMLPFunction
 from .. import _keys
 from ._strided import Contracter, MakeWeightedChannels, Linear
-from ._misc import ScalarMultiply
 
 
 @compile_mode("script")
@@ -34,6 +33,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
     _env_builder_w_index: List[int]
     _env_builder_n_irreps: int
     _input_pad: int
+    _env_sum_constant: float
 
     def __init__(
         self,
@@ -46,7 +46,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         field: str = AtomicDataDict.EDGE_ATTRS_KEY,
         edge_invariant_field: str = AtomicDataDict.EDGE_EMBEDDING_KEY,
         env_embed_multiplicity: int = 32,
-        linear_after_env_embed: bool = False,
         nonscalars_include_parity: bool = True,
         self_tensor_product: bool = False,
         internal_weight_tp: Union[bool, str] = False,
@@ -82,7 +81,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         self.latent_resnet = latent_resnet
         self.env_embed_mul = env_embed_multiplicity
         self.avg_num_neighbors = avg_num_neighbors
-        self.linear_after_env_embed = linear_after_env_embed
         self.num_types = num_types
         self.self_tensor_product = self_tensor_product
 
@@ -114,7 +112,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         self.env_embed_mlps = torch.nn.ModuleList([])
         self.tps = torch.nn.ModuleList([])
         self.linears = torch.nn.ModuleList([])
-        self.env_linears = torch.nn.ModuleList([])
 
         # Embed to the spharm * it as mul
         input_irreps = self.irreps_in[self.field]
@@ -211,33 +208,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         for layer_idx, (arg_irreps, out_irreps) in enumerate(
             zip(tps_irreps_in, tps_irreps_out)
         ):
-            # Make the env embed linear
-            # This linear comes right after the env sum
-            # So we divide by sqrt(N) to normalize
-            # note that if self_tensor_product = False, then the number of neighbors being summed is one smaller
-            if avg_num_neighbors is not None:
-                env_linear_alpha = 1.0 / math.sqrt(
-                    avg_num_neighbors - (0 if self.self_tensor_product else 1)
-                )
-            else:
-                env_linear_alpha = 1.0
-            if self.linear_after_env_embed:
-                self.env_linears.append(
-                    Linear(
-                        [(env_embed_multiplicity, ir) for _, ir in env_embed_irreps],
-                        [(env_embed_multiplicity, ir) for _, ir in env_embed_irreps],
-                        shared_weights=True,
-                        internal_weights=True,
-                        initialization=tensor_track_weight_init,
-                        alpha=env_linear_alpha,
-                    )
-                )
-            else:
-                self.env_linears.append(
-                    ScalarMultiply(env_linear_alpha)
-                    if env_linear_alpha != 1.0
-                    else torch.nn.Identity()
-                )
             # Make TP
             tmp_i_out: int = 0
             instr = []
@@ -368,6 +338,18 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         )
         # - end build modules -
 
+        # - normalization -
+        # we divide the env embed sums by sqrt(N) to normalize
+        # note that if self_tensor_product = False, then the number of neighbors being summed is one smaller
+        # we optimize for the case where normalization is provided, so we don't switch for
+        # the avg_num_neighbors is None case in a special way.
+        env_sum_constant = 1.0
+        if avg_num_neighbors is not None:
+            env_sum_constant = 1.0 / math.sqrt(
+                avg_num_neighbors - (0 if self.self_tensor_product else 1)
+            )
+        self._env_sum_constant = env_sum_constant
+
         # - layer resnet update weights -
         if latent_resnet_coefficients is None:
             # We initialize to zeros, which under exp() all go to ones
@@ -453,8 +435,8 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
 
         # !!!! REMEMBER !!!! update final layer if update the code in main loop!!!
         # This goes through layer0, layer1, ..., layer_max-1
-        for latent, env_embed_mlp, env_linear, tp, linear in zip(
-            self.latents, self.env_embed_mlps, self.env_linears, self.tps, self.linears
+        for latent, env_embed_mlp, tp, linear in zip(
+            self.latents, self.env_embed_mlps, self.tps, self.linears
         ):
             # Compute latents
             new_latents = latent(torch.cat(latent_inputs_to_cat, dim=-1))
@@ -499,7 +481,10 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
 
             # Build the local environments
             # This local environment is a sum over neighbors
-            env_w_edges = self._env_weighter(edge_attr, env_w)
+            # We apply the normalization constant to the env_w weights here, since
+            # everything here before the TP is linear and the env_w is likely smallest
+            # since it only contains the scalars.
+            env_w_edges = self._env_weighter(edge_attr, self._env_sum_constant * env_w)
             local_env_per_edge = scatter(
                 env_w_edges,
                 edge_center,
@@ -515,9 +500,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 # this gives for each edge a sum over all _other_ edges sharing the center
                 # i.e.  env_ij = sum_{k for k != j}{edge_ik}
                 local_env_per_edge = local_env_per_edge - env_w_edges
-
-            # note that env_linear takes care of the normalization constant
-            local_env_per_edge = env_linear(local_env_per_edge)
 
             # Now do the TP
             # recursively tp current features with the environment embeddings
