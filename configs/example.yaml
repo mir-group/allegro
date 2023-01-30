@@ -59,10 +59,7 @@ parity: o3_full
 num_layers: 2
 
 # number of features, more is more accurate but slower, 1, 4, 8, 16, 64, 128 are good options to try depending on data set
-env_embed_multiplicity: 64
-
-# whether or not to embed the initial edge, true often works best
-embed_initial_edge: true
+num_tensor_features: 32
 
 # hidden layer dimensions of the 2-body embedding MLP
 two_body_latent_mlp_latent_dimensions: [128, 256, 512, 1024]

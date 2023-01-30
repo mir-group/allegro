@@ -10,7 +10,7 @@ COMMON_CONFIG = {
     "num_bases": 4,
     "num_types": 3,
     "types_names": ["H", "C", "O"],
-    "env_embed_multiplicity": 4,
+    "num_tensor_features": 4,
     "two_body_latent_mlp_latent_dimensions": [32],
     "latent_mlp_latent_dimensions": [32, 32],
     "env_embed_mlp_latent_dimensions": [],
@@ -47,14 +47,14 @@ minimal_config5 = dict(
     parity="o3_full",
     num_layers=3,
     latent_resnet=True,
-    internal_weight_tp="uvv",
+    tensors_mixing_mode="uvv",
     **COMMON_CONFIG,
 )
 minimal_config6 = dict(
     l_max=4,
     parity="o3_full",
     num_layers=2,
-    internal_weight_tp="p",
+    tensors_mixing_mode="p",
     **COMMON_CONFIG,
 )
 
