@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Most recent change on the bottom.
 
 ## [0.3.0]
+### Added
+- `tensors_mixing_mode`
 
 ### Changed
 - Resnet normalization scheme
