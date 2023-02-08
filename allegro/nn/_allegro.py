@@ -86,9 +86,12 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         self.self_edge_tensor_product = self_edge_tensor_product
 
         assert tensors_mixing_mode in ("uuulin", "uuup", "uvvp", "p")
-        tp_tensors_mixing_mode = (
-            "uuu" if tensors_mixing_mode == "uuulin" else tensors_mixing_mode[:-1]
-        )
+        tp_tensors_mixing_mode = {
+            "uuulin": "uuu",
+            "uuup": "uuu",
+            "uvvp": "uvv",
+            "p": "p",
+        }[tensors_mixing_mode]
         internal_weight_tp = tensors_mixing_mode != "uuulin"
 
         self.register_buffer("r_max", torch.as_tensor(float(r_max)))

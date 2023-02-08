@@ -47,7 +47,7 @@ minimal_config5 = dict(
     parity="o3_full",
     num_layers=3,
     latent_resnet=True,
-    tensors_mixing_mode="uvv",
+    tensors_mixing_mode="uvvp",
     **COMMON_CONFIG,
 )
 minimal_config6 = dict(
