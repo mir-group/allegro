@@ -91,7 +91,7 @@ class EdgeEmbedding(GraphModuleMixin, torch.nn.Module):
             center_types,
         )
         neighbor_embed = torch.index_select(
-            self.type_embeddings[0],
+            self.type_embeddings[1],
             0,
             neighbor_types,
         )
