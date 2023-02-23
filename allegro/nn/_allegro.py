@@ -50,6 +50,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         self_edge_tensor_product: bool = False,
         tensors_mixing_mode: str = "uuulin",
         tensor_track_weight_init: str = "uniform",
+        weight_individual_irreps: bool = True,
         # MLP parameters:
         two_body_latent=ScalarMLPFunction,
         two_body_latent_kwargs={},
@@ -189,11 +190,29 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         del tps_irreps
 
         # Environment builder:
+        # For weighting the initial edge features:
+        self._edge_weighter = MakeWeightedChannels(
+            irreps_in=input_irreps,
+            multiplicity_out=num_tensor_features,
+            pad_to_alignment=pad_to_alignment,
+            weight_individual_irreps=weight_individual_irreps,
+        )
+        # - normalization -
+        # we divide the env embed sums by sqrt(N) to normalize
+        # note that if self_edge_tensor_product = False, then the number of neighbors being summed is one smaller
+        env_sum_constant = 1.0
+        if avg_num_neighbors is not None:
+            env_sum_constant = 1.0 / math.sqrt(
+                avg_num_neighbors - (0 if self.self_edge_tensor_product else 1)
+            )
         self._env_weighter = MakeWeightedChannels(
             irreps_in=input_irreps,
             multiplicity_out=num_tensor_features,
             pad_to_alignment=pad_to_alignment,
+            weight_individual_irreps=weight_individual_irreps,
+            alpha=env_sum_constant,
         )
+        del env_sum_constant
 
         self._n_scalar_outs = []
 
@@ -255,7 +274,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 # also need weights to embed the edge itself
                 # this is because the 2 body latent is mixed in with the first layer
                 # in terms of code
-                generate_n_weights += self._env_weighter.weight_numel
+                generate_n_weights += self._edge_weighter.weight_numel
 
             # the linear acts after the extractor
             self.linears.append(
@@ -333,19 +352,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             mlp_output_dimension=None,
         )
         # - end build modules -
-
-        # - normalization -
-        # we divide the env embed sums by sqrt(N) to normalize
-        # note that if self_edge_tensor_product = False, then the number of neighbors being summed is one smaller
-        # we optimize for the case where normalization is provided, so we don't switch for
-        # the avg_num_neighbors is None case in a special way.
-        env_sum_constant = 1.0
-        if avg_num_neighbors is not None:
-            env_sum_constant = 1.0 / math.sqrt(
-                avg_num_neighbors - (0 if self.self_edge_tensor_product else 1)
-            )
-        self._env_sum_constant = env_sum_constant
-        del env_sum_constant
 
         # - layer resnet update weights -
         if latent_resnet_coefficients is None:
@@ -468,9 +474,9 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
 
             if layer_index == 0:
                 # embed initial edge
-                env_w = weights.narrow(-1, w_index, self._env_weighter.weight_numel)
-                w_index += self._env_weighter.weight_numel
-                features = self._env_weighter(features, env_w)  # features is edge_attr
+                env_w = weights.narrow(-1, w_index, self._edge_weighter.weight_numel)
+                w_index += self._edge_weighter.weight_numel
+                features = self._edge_weighter(features, env_w)  # features is edge_attr
 
             # Extract weights for the environment builder
             env_w = weights.narrow(-1, w_index, self._env_weighter.weight_numel)
@@ -481,7 +487,8 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             # We apply the normalization constant to the env_w weights here, since
             # everything here before the TP is linear and the env_w is likely smallest
             # since it only contains the scalars.
-            env_w_edges = self._env_weighter(edge_attr, self._env_sum_constant * env_w)
+            # It is applied via _env_weighter's alpha
+            env_w_edges = self._env_weighter(edge_attr, env_w)
             local_env_per_edge = scatter(
                 env_w_edges,
                 edge_center,
