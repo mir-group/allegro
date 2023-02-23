@@ -22,7 +22,7 @@ class MakeWeightedChannels(torch.nn.Module):
         weight_individual_irreps: bool = True,
     ):
         super().__init__()
-        assert all(mul == 1 for mul, ir in irreps_in)
+        assert all([mul == 1 for mul, ir in irreps_in])
         assert multiplicity_out >= 1
         self._num_irreps = len(irreps_in)
         self.multiplicity_out = multiplicity_out
