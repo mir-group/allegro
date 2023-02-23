@@ -10,6 +10,7 @@ class MakeWeightedChannels(torch.nn.Module):
     weight_numel: int
     multiplicity_out: int
     weight_individual_irreps: bool
+    alpha: float
     _num_irreps: int
 
     def __init__(
@@ -26,6 +27,7 @@ class MakeWeightedChannels(torch.nn.Module):
         self._num_irreps = len(irreps_in)
         self.multiplicity_out = multiplicity_out
         self.weight_individual_irreps = weight_individual_irreps
+        self.alpha = alpha
         if not weight_individual_irreps:
             assert pad_to_alignment == 1
             self.weight_numel = multiplicity_out
@@ -64,4 +66,4 @@ class MakeWeightedChannels(torch.nn.Module):
             # weights are [z, u]
             # edge_attr are [z, i]
             # [z, u, 1] * [z, 1, i]
-            return weights.unsqueeze(-1) * edge_attr.unsqueeze(-2)
+            return weights.unsqueeze(-1) * (self.alpha * edge_attr.unsqueeze(-2))
