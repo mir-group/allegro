@@ -8,7 +8,7 @@ Most recent change on the bottom.
 
 ## [0.3.0]
 ### Added
-- `tensors_mixing_mode`
+- `tensors_mixing_mode`, `weight_individual_irreps`
 
 ### Changed
 - Resnet normalization scheme
