@@ -236,8 +236,8 @@ def codegen_strided_tensor_product_forward(
 
     w3j_proxy = Proxy(graph_out.get_attr("_big_w3j"))
 
-    if shared_weights and connection_mode == "p":
-        # special case
+    if False and shared_weights and connection_mode == "p":
+        # special case can optionally be used
         assert has_weight
         # we can precontract weights and w3j to remove the `p` dimension
         # weights are `p`, w3j is pkij
