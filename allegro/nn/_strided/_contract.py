@@ -236,41 +236,83 @@ def codegen_strided_tensor_product_forward(
 
     w3j_proxy = Proxy(graph_out.get_attr("_big_w3j"))
 
-    # convert to strided
-    x1s_out = x1s_out.reshape(-1, layout_in1.mul, layout_in1.base_dim)
-    x2s_out = x2s_out.reshape(-1, layout_in2.mul, layout_in2.base_dim)
+    if shared_weights and connection_mode == "p":
+        # special case
+        assert has_weight
+        # we can precontract weights and w3j to remove the `p` dimension
+        # weights are `p`, w3j is pkij
+        # non diagonal
+        if w3j_is_ij_diagonal:
+            x1s_out = x1s_out.reshape(-1, layout_in1.base_dim)
+            x2s_out = x2s_out.reshape(-1, layout_in2.base_dim)
+            # ikp @ p -> ik (mv)
+            # zi,zi->zi     (mul)
+            # zi @ ik -> zk  (mm)
+            # w3j is pki here
+            w3j = w3j.permute(2, 1, 0).reshape(-1, num_paths).contiguous()  # => [ik]p
+            # contract with p weights, ikp @ p -> ik (mv)
+            ww3j_proxy = torch.mv(w3j_proxy, ws_out).view(
+                layout_in1.base_dim, layout_out.base_dim
+            )  # => ik
+            out = x1s_out * x2s_out  # zi
+            out = torch.mm(out, ww3j_proxy).view(
+                -1, layout_out.mul, layout_out.base_dim
+            )  # zk
+        else:
+            x1s_out = x1s_out.reshape(-1, layout_in1.base_dim)
+            x2s_out = x2s_out.reshape(-1, layout_in2.base_dim, 1)
+            # ikjp @ p -> ikj (mv)
+            # zi @ i[kj] -> z[kj]  (mm)
+            # zkj @ zj1 -> zk1 (bmm)
+            # w3j is pkij here
+            w3j = (
+                w3j.permute(2, 1, 3, 0).reshape(-1, num_paths).contiguous()
+            )  # => [ikj]p
+            # contract with p weights, ikjp @ p -> ikj (mv)
+            ww3j_proxy = torch.mv(w3j_proxy, ws_out).view(
+                layout_in1.base_dim, layout_out.base_dim * layout_in2.base_dim
+            )  # i[kj]
+            out = torch.mm(x1s_out, ww3j_proxy).view(
+                -1, layout_out.base_dim, layout_in2.base_dim
+            )  # z[kj] -> zkj
+            out = torch.bmm(out, x2s_out).reshape(
+                -1, layout_out.mul, layout_out.base_dim
+            )  # [zu]k1 -> zuk
+    else:
+        # convert to strided
+        x1s_out = x1s_out.reshape(-1, layout_in1.mul, layout_in1.base_dim)
+        x2s_out = x2s_out.reshape(-1, layout_in2.mul, layout_in2.base_dim)
+        # do the einsum
+        # has shape zwk
+        j = "i" if w3j_is_ij_diagonal else "j"
+        ij = "i" if w3j_is_ij_diagonal else "ij"
+        if has_weight:
+            p = "p" if num_paths > 1 else ""
 
-    # do the einsum
-    # has shape zwk
-    j = "i" if w3j_is_ij_diagonal else "j"
-    ij = "i" if w3j_is_ij_diagonal else "ij"
-    if has_weight:
-        p = "p" if num_paths > 1 else ""
-
-        if shared_weights:
-            # for shared weights, we can precontract weights and w3j so they can be frozen together
-            # this is usually advantageous for inference, since the weights would have to be
-            # multiplied in anyway at some point
-            ww3j_proxy = torch.einsum(
-                f"{weight_label},{p}k{ij}->{weight_label.rstrip('p')}k{ij}",
-                ws_out,
-                w3j_proxy,
-            )
-            # we use minimal opt_einsum_fx later without einsum fusion, so this is safe
-            out = torch.einsum(
-                f"z{u}i,z{v}{j},{weight_label.rstrip('p')}k{ij}->z{w}k",
-                x1s_out,
-                x2s_out,
-                ww3j_proxy,
-            )
+            if shared_weights:
+                # for shared weights, we can precontract weights and w3j so they can be frozen together
+                # this is usually advantageous for inference, since the weights would have to be
+                # multiplied in anyway at some point
+                ww3j_proxy = torch.einsum(
+                    f"{weight_label},{p}k{ij}->{weight_label.rstrip('p')}k{ij}",
+                    ws_out,
+                    w3j_proxy,
+                )
+                # we use minimal opt_einsum_fx later without einsum fusion, so this is safe
+                out = torch.einsum(
+                    f"z{u}i,z{v}{j},{weight_label.rstrip('p')}k{ij}->z{w}k",
+                    x1s_out,
+                    x2s_out,
+                    ww3j_proxy,
+                )
+            else:
+                # use einsum for the full contract
+                einstr = f"{z}{weight_label},z{u}i,z{v}{j},{p}k{ij}->z{w}k"
+                out = torch.einsum(einstr, ws_out, x1s_out, x2s_out, w3j_proxy)
         else:
             # use einsum for the full contract
-            einstr = f"{z}{weight_label},z{u}i,z{v}{j},{p}k{ij}->z{w}k"
-            out = torch.einsum(einstr, ws_out, x1s_out, x2s_out, w3j_proxy)
-    else:
-        # use einsum for the full contract
-        einstr = f"z{u}i,z{v}{j},{'p' if num_paths > 1 else ''}k{ij}->z{w}k"
-        out = torch.einsum(einstr, x1s_out, x2s_out, w3j_proxy)
+            einstr = f"z{u}i,z{v}{j},{'p' if num_paths > 1 else ''}k{ij}->z{w}k"
+            out = torch.einsum(einstr, x1s_out, x2s_out, w3j_proxy)
 
     graph_out.output(out.node)
 
