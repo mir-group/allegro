@@ -28,15 +28,13 @@ def codegen_strided_tensor_product_forward(
     internal_weights: bool = False,
     initialization: str = "uniform",
     specialized_code: bool = True,
-    pad_to_alignment: int = 1,
 ) -> Optional[fx.GraphModule]:
     """Returns None if strided doesn't make sense for this TP."""
-    # TODO padding
     # Check if irreps can be strided
     try:
-        layout_in1 = StridedLayout(irreps_in1, pad_to_multiple=pad_to_alignment)
-        layout_in2 = StridedLayout(irreps_in2, pad_to_multiple=pad_to_alignment)
-        layout_out = StridedLayout(irreps_out, pad_to_multiple=pad_to_alignment)
+        layout_in1 = StridedLayout(irreps_in1)
+        layout_in2 = StridedLayout(irreps_in2)
+        layout_out = StridedLayout(irreps_out)
     except ValueError:
         # one cannot be strided
         return None
@@ -386,7 +384,6 @@ def Contracter(
     instructions: List[Tuple[int, int, int]],
     has_weight: bool,
     connection_mode: str,
-    pad_to_alignment: int = 1,
     shared_weights: bool = False,
     internal_weights: bool = False,
     initialization: str = "uniform",
@@ -435,7 +432,6 @@ def Contracter(
         shared_weights=shared_weights,
         internal_weights=internal_weights,
         initialization=initialization,
-        pad_to_alignment=pad_to_alignment,
     )
     if mod is None:
         raise ValueError("Couldn't use strided for given layout")
