@@ -11,16 +11,12 @@ from test_contract import _strided_to_cat
 
 @pytest.mark.parametrize("irreps_in", ["0e + 1o", "0e + 1o + 2e + 3o"])
 @pytest.mark.parametrize("mul_out", [1, 5])
-@pytest.mark.parametrize("pad", [1, 2, 4])
 def test_make_weighter(
     irreps_in,
     mul_out,
-    pad,
 ):
     irreps_in = o3.Irreps(irreps_in)
-    m_strided = MakeWeightedChannels(
-        irreps_in=irreps_in, multiplicity_out=mul_out, pad_to_alignment=pad
-    )
+    m_strided = MakeWeightedChannels(irreps_in=irreps_in, multiplicity_out=mul_out)
     m_cat = o3.Linear(
         irreps_in=irreps_in,
         irreps_out=o3.Irreps([(mul_out, ir) for _, ir in irreps_in]),

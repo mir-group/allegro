@@ -1,5 +1,4 @@
 import pytest
-import math
 
 import torch
 
@@ -23,7 +22,6 @@ from allegro.nn._strided import Contracter
         ("p", 3, 3, 3),
     ],
 )
-@pytest.mark.parametrize("pad", [1, 2, 4])
 @pytest.mark.parametrize("shared_weights", [False, True])
 def test_contract(
     irreps_in1,
@@ -33,7 +31,6 @@ def test_contract(
     mul1,
     mul2,
     mulout,
-    pad,
     shared_weights,
 ):
     irreps_in1 = o3.Irreps(irreps_in1)
@@ -55,7 +52,6 @@ def test_contract(
         connection_mode=mode,
         shared_weights=shared_weights,
         internal_weights=shared_weights,
-        pad_to_alignment=1,
     )
     c_opt_mod = Contracter(
         irreps_in1=o3.Irreps((mul1, ir) for _, ir in irreps_in1),
@@ -66,25 +62,13 @@ def test_contract(
         connection_mode=mode,
         shared_weights=shared_weights,
         internal_weights=shared_weights,
-        pad_to_alignment=pad,
     )
     if shared_weights:
         with torch.no_grad():
             c_opt_mod.w.copy_(c_base.w)
 
-    # deal with padding
     def c_opt(x, y, w=None):
-        args = (
-            torch.nn.functional.pad(
-                x,
-                (0, pad * math.ceil(x.shape[-1] / pad) - x.shape[-1]),
-            ),
-            torch.nn.functional.pad(
-                y,
-                (0, pad * math.ceil(y.shape[-1] / pad) - y.shape[-1]),
-            ),
-            w,
-        )
+        args = (x, y, w)
         if w is None:
             args = args[:-1]
         return c_opt_mod(*args)
@@ -151,7 +135,6 @@ def _strided_to_cat(irreps, mul, x):
         ("uvv", 1, 8, 8),
     ],
 )
-@pytest.mark.parametrize("pad", [1, 2, 4])
 @pytest.mark.parametrize("shared_weights", [False, True])
 def test_like_tp(
     irreps_in1,
@@ -161,7 +144,6 @@ def test_like_tp(
     mul1,
     mul2,
     mulout,
-    pad,
     shared_weights,
 ):
     irreps_in1 = o3.Irreps(irreps_in1)
@@ -185,7 +167,6 @@ def test_like_tp(
         connection_mode=mode,
         shared_weights=shared_weights,
         internal_weights=shared_weights,
-        pad_to_alignment=pad,
     )
     batchdim = 7
     args_in = (
