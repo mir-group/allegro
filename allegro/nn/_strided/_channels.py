@@ -1,5 +1,3 @@
-from math import ceil
-
 import torch
 
 from e3nn.util.jit import compile_mode
@@ -17,7 +15,6 @@ class MakeWeightedChannels(torch.nn.Module):
         self,
         irreps_in,
         multiplicity_out: int,
-        pad_to_alignment: int = 1,
         alpha: float = 1.0,
         weight_individual_irreps: bool = True,
     ):
@@ -29,19 +26,13 @@ class MakeWeightedChannels(torch.nn.Module):
         self.weight_individual_irreps = weight_individual_irreps
         self.alpha = alpha
         if not weight_individual_irreps:
-            assert pad_to_alignment == 1
             self.weight_numel = multiplicity_out
             self.register_buffer("_rtoi", torch.Tensor())
             return
         self.weight_numel = len(irreps_in) * multiplicity_out
         # Each edgewise output multiplicity is a per-irrep weighted sum over the input
         # So we need to apply the weight for the ith irrep to all DOF in that irrep
-        # pad to padded length
-        n_pad = (
-            int(ceil(irreps_in.dim / pad_to_alignment)) * pad_to_alignment
-            - irreps_in.dim
-        )
-        rtoi = torch.zeros(self._num_irreps, irreps_in.dim + n_pad)
+        rtoi = torch.zeros(self._num_irreps, irreps_in.dim)
         for i, this_slice in enumerate(irreps_in.slices()):
             rtoi[i, this_slice] = alpha
         self.register_buffer("_rtoi", rtoi, persistent=False)

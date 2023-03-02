@@ -32,7 +32,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
     # internal values
     _env_builder_w_index: List[int]
     _env_builder_n_irreps: int
-    _input_pad: int
     _env_sum_constant: float
 
     def __init__(
@@ -62,8 +61,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         latent_resnet_coefficients: Optional[List[float]] = None,
         latent_resnet_coefficients_learnable: bool = False,
         latent_out_field: Optional[str] = _keys.EDGE_FEATURES,
-        # Performance parameters:
-        pad_to_alignment: int = 1,
         # Other:
         irreps_in=None,
     ):
@@ -126,9 +123,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         assert (
             env_embed_irreps[0].ir == SCALAR
         ), "env_embed_irreps must start with scalars"
-        self._input_pad = (
-            int(math.ceil(env_embed_irreps.dim / pad_to_alignment)) * pad_to_alignment
-        ) - env_embed_irreps.dim
         self.register_buffer("_zero", torch.zeros(1, 1))
 
         # Initially, we have the B(r)Y(\vec{r})-projection of the edges,
@@ -194,7 +188,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         self._edge_weighter = MakeWeightedChannels(
             irreps_in=input_irreps,
             multiplicity_out=num_tensor_features,
-            pad_to_alignment=pad_to_alignment,
             weight_individual_irreps=weight_individual_irreps,
         )
         # - normalization -
@@ -208,7 +201,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         self._env_weighter = MakeWeightedChannels(
             irreps_in=input_irreps,
             multiplicity_out=num_tensor_features,
-            pad_to_alignment=pad_to_alignment,
             weight_individual_irreps=weight_individual_irreps,
             alpha=env_sum_constant,
         )
@@ -259,7 +251,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 has_weight=internal_weight_tp,
                 internal_weights=internal_weight_tp,
                 initialization=tensor_track_weight_init,
-                pad_to_alignment=pad_to_alignment,
             )
             self.tps.append(tp)
             del tp
@@ -284,7 +275,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                     shared_weights=True,
                     internal_weights=True,
                     initialization=tensor_track_weight_init,
-                    pad_to_alignment=pad_to_alignment,
                 )
                 if not internal_weight_tp
                 else torch.nn.Identity()
@@ -400,16 +390,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         num_atoms: int = len(data[AtomicDataDict.POSITIONS_KEY])
 
         edge_attr = data[self.field]
-        # pad edge_attr
-        if self._input_pad > 0:
-            edge_attr = torch.cat(
-                (
-                    edge_attr,
-                    self._zero.expand(len(edge_attr), self._input_pad),
-                ),
-                dim=-1,
-            )
-
         edge_invariants = data[self.edge_invariant_field]
         # pre-declare variables as Tensors for TorchScript
         scalars = self._zero

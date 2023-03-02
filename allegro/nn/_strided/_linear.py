@@ -27,14 +27,13 @@ def codegen_strided_linear(
     internal_weights: bool = False,
     shared_weights: bool = False,
     initialization: str = "uniform",
-    pad_to_alignment: int = 1,
     alpha: float = 1.0,
 ) -> Optional[fx.GraphModule]:
     """Returns None if strided doesn't make sense for this TP."""
     # Check if irreps can be strided
     try:
-        layout_in = StridedLayout(irreps_in, pad_to_multiple=pad_to_alignment)
-        layout_out = StridedLayout(irreps_out, pad_to_multiple=pad_to_alignment)
+        layout_in = StridedLayout(irreps_in)
+        layout_out = StridedLayout(irreps_out)
     except ValueError:
         # one cannot be strided
         return None
@@ -145,14 +144,6 @@ def codegen_strided_linear(
     else:
         out = outs[0]
 
-    # pad output
-    padding: int = layout_out.base_dim - layout_out.base_irreps.dim
-    if padding > 0:
-        out = torch.nn.functional.pad(
-            out,
-            (0, padding),
-        )
-
     graph_out.output(out.node)
 
     # check graphs
@@ -217,7 +208,6 @@ def Linear(
     internal_weights: bool = False,
     initialization: str = "uniform",
     instructions: Optional[List[Tuple[int, int]]] = None,
-    pad_to_alignment: int = 1,
     alpha: float = 1.0,
 ):
     irreps_in = o3.Irreps(irreps_in)
@@ -242,7 +232,6 @@ def Linear(
         shared_weights=shared_weights,
         internal_weights=internal_weights,
         initialization=initialization,
-        pad_to_alignment=pad_to_alignment,
         alpha=alpha,
     )
 
