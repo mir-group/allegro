@@ -65,7 +65,6 @@ chemical_symbol_to_type:
 
 # logging
 wandb: false
-wandb_project: aspirin
 verbose: info
 
 # training

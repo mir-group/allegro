@@ -26,8 +26,6 @@ class EdgeEmbedding(GraphModuleMixin, torch.nn.Module):
         basis_kwargs={},
         basis_mlp=ScalarMLPFunction,
         basis_mlp_kwargs={},
-        typexbasis_mlp=ScalarMLPFunction,
-        typexbasis_mlp_kwargs={},
         cutoff=PolynomialCutoff,
         cutoff_kwargs={},
         irreps_in=None,
@@ -45,27 +43,26 @@ class EdgeEmbedding(GraphModuleMixin, torch.nn.Module):
         self.basis = compile(basis(**basis_kwargs))
         self.cutoff = compile(cutoff(**cutoff_kwargs))
 
-        # default to an extra linear layer, since it costs nothing in inference
-        opts = dict(mlp_latent_dimensions=[type_embedding_dim])
-        opts.update(basis_mlp_kwargs)
-        self.basis_mlp = basis_mlp(
-            mlp_input_dimension=self.basis.num_basis,
-            mlp_output_dimension=type_embedding_dim,
-            **opts,
-        )
-        # default to an extra linear layer, since it costs nothing in inference
-        opts = dict(mlp_latent_dimensions=[type_embedding_dim])
-        opts.update(typexbasis_mlp_kwargs)
-        self.typexbasis_mlp = typexbasis_mlp(
-            mlp_input_dimension=type_embedding_dim * (1 if self._embed_prod else 2),
-            mlp_output_dimension=type_embedding_dim,
-            **opts,
-        )
+        if typexbasis_mode == "product":
+            # default
+            opts = dict(mlp_latent_dimensions=[], mlp_nonlinearity=None)
+            opts.update(basis_mlp_kwargs)
+            self.basis_mlp = basis_mlp(
+                mlp_input_dimension=self.basis.num_basis,
+                mlp_output_dimension=type_embedding_dim,
+                **opts,
+            )
+        elif typexbasis_mode == "cat":
+            self.basis_mlp = torch.nn.Identity()
+        else:
+            raise NotImplementedError
 
         self.irreps_out[AtomicDataDict.EDGE_EMBEDDING_KEY] = o3.Irreps(
             [
                 (
-                    type_embedding_dim,
+                    type_embedding_dim
+                    if typexbasis_mode == "product"
+                    else type_embedding_dim + self.basis.num_basis,
                     (0, 1),
                 )
             ]
@@ -73,13 +70,8 @@ class EdgeEmbedding(GraphModuleMixin, torch.nn.Module):
 
     def forward(self, data: AtomicDataDict.Type) -> AtomicDataDict.Type:
         data = AtomicDataDict.with_edge_vectors(data, with_lengths=True)
-        edge_length = data[AtomicDataDict.EDGE_LENGTH_KEY]
         # embed types
-        cutoff = self.cutoff(edge_length)
-        basis = self.basis(edge_length)
-        basis = self.basis_mlp(basis)
         atom_types = data[AtomicDataDict.ATOM_TYPE_KEY].squeeze(-1)
-
         edge_types = torch.index_select(
             atom_types, 0, data[AtomicDataDict.EDGE_INDEX_KEY].reshape(-1)
         ).view(2, -1)
@@ -96,18 +88,26 @@ class EdgeEmbedding(GraphModuleMixin, torch.nn.Module):
             neighbor_types,
         )
 
+        # do basis and cutoffs
+        edge_length = data[AtomicDataDict.EDGE_LENGTH_KEY]
+        cutoff = self.cutoff(edge_length)
+        basis = self.basis(edge_length)
+
+        # combine type and basis embedings
         if self._embed_prod:
+            # project basis out to type embedding dimension
+            basis = self.basis_mlp(basis)
             type_embed = torch.cat(
                 (center_embed, neighbor_embed),
                 dim=-1,
             )
-            edge_embed = self.typexbasis_mlp(type_embed * basis)
+            edge_embed = type_embed * basis
         else:
             edge_embed = torch.cat(
                 (basis, center_embed, neighbor_embed),
                 dim=-1,
             )
-            edge_embed = self.typexbasis_mlp(edge_embed)
+            edge_embed = edge_embed
 
         data[AtomicDataDict.EDGE_EMBEDDING_KEY] = edge_embed * cutoff.unsqueeze(-1)
         return data
