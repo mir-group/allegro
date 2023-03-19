@@ -3,8 +3,7 @@
 # https://github.com/mir-group/nequip/blob/main/configs/full.yaml
 # This file additionally documents the Allegro-specific options
 
-
-# general
+# -- general -- 
 
 # Two folders will be used during the training: 'root'/process and 'root'/'run_name'
 # run_name contains logfiles and saved models
@@ -40,25 +39,33 @@ avg_num_neighbors: auto
 # radial basis
 # set true to train the bessel roots
 BesselBasis_trainable: true
+# determine the highest spatial frequency in the Bessel basis, which indirectly sets the number of basis functions
 bessel_frequency_cutoff: 4  # Angstrom^-1
-num_bases: 8
+# for a trainable Bessel basis, you can optionally include multiple Bessel bases with independent trainable parameters
+num_bases: 1
 
-# p-parameter in envelope function, as proposed in Klicpera, J. et al., arXiv:2003.03123 
-# sets it BOTH for the RadialBasisProjection AND the Allegro_Module
+# p-parameter in envelope function, as proposed in Klicpera, J. et al., arXiv:2003.03123
 PolynomialCutoff_p: 6  
 
+# how to combine atom type embeddings and the radial basis in the input to the Allegro layers
+# "product" indicates an elementwise (i.e. channelwise) product between type and basis embeddings
+# "cat" indicates a simple concatenation of atom type and radial basis embeddings
+typexbasis_mode: product
+# if "product" is specified, `basis_mlp_*` options can also be specified for an MLP that embeds the radial basis
+# to the same dimension as the type embedding in preparation for that channel/elementwise multiplication.
+
 # symmetry
-# maximum order l to use in spherical harmonics embedding, 1 is basedline (fast), 2 is more accurate, but slower, 3 highly accurate but slow
+# maximum order l to use in spherical harmonics embedding, 1 is baseline (fast), 2 is more accurate, but slower, 3 highly accurate but slow
 l_max: 2
 
-# whether to include E(3)-symmetry / parity
+# whether to include parity symmetry equivariance
 # allowed: o3_full, o3_restricted, so3
 parity: o3_full  
 
 # number of tensor product layers, 1-3 usually best, more is more accurate but slower
 num_layers: 2
 
-# number of features, more is more accurate but slower, 1, 4, 8, 16, 64, 128 are good options to try depending on data set
+# number of tensor features, more is more accurate but slower, 1, 4, 8, 16, 64, 128 are good options to try depending on data set
 num_tensor_features: 32
 
 # hidden layer dimensions of the 2-body embedding MLP
