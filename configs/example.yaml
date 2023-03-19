@@ -27,7 +27,7 @@ model_builders:
  - allegro.model.Allegro
  # the typical model builders from `nequip` can still be used:
  - PerSpeciesRescale
- - ForceOutput
+ - StressForceOutput
  - RescaleEnergyEtc
 
 # radial cutoff in length units
@@ -68,6 +68,12 @@ num_layers: 2
 # number of tensor features, more is more accurate but slower, 1, 4, 8, 16, 64, 128 are good options to try depending on data set
 num_tensor_features: 32
 
+# determines how various tensor product paths producing the same output irrep are mixed
+# valid options, in order from most restrictive and fastest to least restrictive and slowest are
+#   p, uuup, uvvp, uuulin
+# uuulin is the construction described in the original Allegro paper
+tensors_mixing_mode: p
+
 # hidden layer dimensions of the 2-body embedding MLP
 two_body_latent_mlp_latent_dimensions: [64, 128, 256, 512]
 # nonlinearity used in the 2-body embedding MLP
@@ -84,7 +90,9 @@ latent_mlp_nonlinearity: silu
 # weight initialization of the latent MLP
 latent_mlp_initialization: uniform
 
-# whether to use a resnet update in the scalar latent latent space, true works best usually
+# whether to use a resnet update in the scalar latent latent space
+# if True, a resnet is used
+# if False, each latent MLP receives as input a concatenation of the output of _all_ previous latent MLPs
 latent_resnet: true
 
 # hidden layer dimensions of the environment embedding mlp, none work best (will build a single linear layer)

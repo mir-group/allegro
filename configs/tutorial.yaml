@@ -10,7 +10,7 @@ model_builders:
  - allegro.model.Allegro
  # the typical model builders from `nequip` can still be used:
  - PerSpeciesRescale
- - ForceOutput
+ - StressForceOutput
  - RescaleEnergyEtc
 
 # cutoffs
