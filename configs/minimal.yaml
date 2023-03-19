@@ -14,7 +14,7 @@ dataset_seed: 123456
 model_builders:
  - allegro.model.Allegro
  - PerSpeciesRescale
- - ForceOutput
+ - StressForceOutput
  - RescaleEnergyEtc
 
 # cutoffs
