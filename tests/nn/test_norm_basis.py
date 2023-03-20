@@ -14,7 +14,7 @@ def test_normalized_basis(r_min, norm_basis_mean_shift):
         original_basis_kwargs={"r_max": 5.0, "num_bessels_per_basis": 8},
         norm_basis_mean_shift=norm_basis_mean_shift,
     )
-    rs = torch.empty(10 * nb.n)
+    rs = torch.empty(100 * nb.n)
     rs.uniform_(nb.r_min, nb.r_max)
     bvals = nb(rs)
     threshold = 2e-2  # pretty arbitrary, TODO
