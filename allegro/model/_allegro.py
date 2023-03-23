@@ -11,8 +11,8 @@ from nequip.nn.embedding import SphericalHarmonicEdgeAttrs
 
 from allegro.nn import (
     NormalizedBasis,
-    EdgeEmbedding,
-    BesselBasis,
+    ProductTypeEmbedding,
+    AllegroBesselBasis,
     EdgewiseEnergySum,
     Allegro_Module,
     ScalarMLP,
@@ -62,16 +62,16 @@ def Allegro(config, initialize: bool, dataset: Optional[AtomicDataset] = None):
     layers = {
         # -- Encode --
         # Get various edge invariants
-        "edge_embedding": (
-            EdgeEmbedding,
+        "radial_basis": (
+            NormalizedBasis
+            if config.get("use_original_normalized_basis", False)
+            else AllegroBesselBasis
+        ),
+        "typeembed": (
+            ProductTypeEmbedding,
             dict(
-                basis=(
-                    NormalizedBasis
-                    if config.get("normalize_basis", True)
-                    else BesselBasis
-                ),
-                type_embedding_dim=config.get(
-                    "type_embedding_dim",
+                initial_scalar_embedding_dim=config.get(
+                    "initial_scalar_embedding_dim",
                     # sane default to the MLP that comes next
                     config["two_body_latent_mlp_latent_dimensions"][0],
                 ),

@@ -1,6 +1,8 @@
 import pytest
 import torch
 
+from nequip.data import AtomicDataDict
+
 from allegro.nn import NormalizedBasis
 
 
@@ -11,12 +13,17 @@ def test_normalized_basis(r_min, norm_basis_mean_shift):
     nb = NormalizedBasis(
         r_min=r_min,
         r_max=5.0,
-        original_basis_kwargs={"r_max": 5.0, "num_bessels_per_basis": 8},
+        original_basis_kwargs={"r_max": 5.0, "num_basis": 8},
         norm_basis_mean_shift=norm_basis_mean_shift,
     )
     rs = torch.empty(100 * nb.n)
     rs.uniform_(nb.r_min, nb.r_max)
-    bvals = nb(rs)
+    bvals = nb(
+        {
+            AtomicDataDict.EDGE_LENGTH_KEY: rs,
+            AtomicDataDict.EDGE_VECTORS_KEY: torch.randn(len(rs), 3),
+        }
+    )[AtomicDataDict.EDGE_EMBEDDING_KEY]
     threshold = 2e-2  # pretty arbitrary, TODO
     if norm_basis_mean_shift:
         b_std, b_mean = torch.std_mean(bvals, dim=0)
