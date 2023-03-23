@@ -1,96 +1,11 @@
-from typing import Optional
-
-import math
-
 import torch
 
-
-class BesselBasis(torch.nn.Module):
-    r_max: float
-    prefactor: float
-    cutoff_p: float
-
-    def __init__(
-        self,
-        r_max: float,
-        bessel_frequency_cutoff: Optional[float] = None,
-        num_bessels_per_basis: Optional[int] = None,
-        num_bases: int = 1,
-        trainable: bool = True,
-    ):
-        r"""Radial Bessel Basis with Polynomial Cutoff, as proposed in DimeNet: https://arxiv.org/abs/2003.03123
+from nequip.data import AtomicDataDict
+from nequip.nn import GraphModuleMixin
+from nequip.nn.radial_basis import BesselBasis
 
 
-        Parameters
-        ----------
-        r_max : float
-            Cutoff radius
-
-        num_basis : int
-            Number of Bessel Basis functions
-
-        trainable : bool
-            Train the :math:`n \pi` part or not.
-        """
-        super().__init__()
-
-        self.trainable = trainable
-        self.r_max = float(r_max)
-        self.num_bases = num_bases
-        assert num_bases >= 1
-        if num_bases > 1:
-            assert trainable
-        if bessel_frequency_cutoff is not None:
-            assert num_bessels_per_basis is None
-            # max freq is n pi / r_max
-            # => n = (r_max / pi) * bessel_frequency_cutoff
-            num_bessels_per_basis = int(
-                math.ceil((self.r_max * bessel_frequency_cutoff) / math.pi)
-            )
-            # ^ ceil to ensure at least some basis functions
-        assert num_bessels_per_basis is not None
-        self.num_bessels_per_basis = num_bessels_per_basis
-        self.num_basis = num_bessels_per_basis * num_bases
-        self.prefactor = math.sqrt(2.0 / self.r_max)
-
-        bessel_weights = (
-            (
-                torch.linspace(
-                    start=1.0, end=num_bessels_per_basis, steps=num_bessels_per_basis
-                )
-                * (math.pi / self.r_max)
-            )
-            .unsqueeze(0)
-            .expand(num_bases, num_bessels_per_basis)
-            .clone(memory_format=torch.contiguous_format)
-        )
-        if self.trainable:
-            self.bessel_weights = torch.nn.Parameter(bessel_weights)
-        else:
-            self.register_buffer("bessel_weights", bessel_weights)
-
-    def forward(self, r: torch.Tensor) -> torch.Tensor:
-        """
-        Evaluate basis for input x.
-
-        Parameters
-        ----------
-        r : torch.Tensor
-            Values to embed
-
-        Returns
-        -------
-            basis
-        """
-        r = r.view(-1, 1, 1)
-
-        # [z, 1, 1] * [num_bases, num_basis] = [z, num_bases, num_basis]
-        bessel = (self.prefactor / r) * torch.sin(r * self.bessel_weights)
-
-        return bessel.view(-1, self.num_basis)
-
-
-class NormalizedBasis(torch.nn.Module):
+class NormalizedBasis(GraphModuleMixin, torch.nn.Module):
     """Normalized version of a given radial basis.
 
     Args:
@@ -112,6 +27,7 @@ class NormalizedBasis(torch.nn.Module):
         original_basis_kwargs: dict = {},
         n: int = 4000,
         norm_basis_mean_shift: bool = False,
+        irreps_in=None,
     ):
         super().__init__()
         self.basis = original_basis(**original_basis_kwargs)
@@ -139,8 +55,17 @@ class NormalizedBasis(torch.nn.Module):
         self.register_buffer("_mean", basis_mean)
         self.register_buffer("_inv_std", torch.reciprocal(basis_std))
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        basis = self.basis(x)
+        self._init_irreps(
+            irreps_in=irreps_in,
+            irreps_out={
+                AtomicDataDict.EDGE_EMBEDDING_KEY: f"{self.basis.num_basis}x0e"
+            },
+        )
+
+    def forward(self, data: AtomicDataDict.Type) -> AtomicDataDict.Type:
+        data = AtomicDataDict.with_edge_vectors(data, with_lengths=True)
+        basis = self.basis(data[AtomicDataDict.EDGE_LENGTH_KEY])
         if self.norm_basis_mean_shift:
             basis = basis - self._mean
-        return basis * self._inv_std
+        data[AtomicDataDict.EDGE_EMBEDDING_KEY] = basis * self._inv_std
+        return data
