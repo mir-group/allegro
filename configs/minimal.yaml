@@ -19,6 +19,17 @@ model_builders:
 
 # cutoffs
 r_max: 6.0
+# optionally, you can specify per-edge-type cutoffs to be applied to the initial basis
+per_edge_type_cutoff:
+  # These can be given explicitly for each ordered edge type:
+  H:
+    H: 2.0   # H-H
+    C: 2.0   # H-C
+    O: 2.0   # H-O
+  # or for all edges with a given center type
+  C: 5.0     # C-*  (C-H, C-O, C-C)
+  O: 6.0     # O-*
+
 
 # network symmetry
 l_max: 1
