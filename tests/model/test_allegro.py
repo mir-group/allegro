@@ -9,7 +9,7 @@ COMMON_CONFIG = {
     "num_bessels_per_basis": 4,
     "num_bases": 4,
     "num_types": 3,
-    "types_names": ["H", "C", "O"],
+    "type_names": ["H", "C", "O"],
     "num_tensor_features": 4,
     "two_body_latent_mlp_latent_dimensions": [32],
     "latent_mlp_latent_dimensions": [32, 32],
@@ -27,6 +27,7 @@ minimal_config2 = dict(
     l_max=3,
     parity="o3_full",
     num_layers=2,
+    per_edge_type_cutoff={"H": 2.0, "C": {"H": 4.0, "C": 3.5, "O": 3.7}, "O": 3.9},
     **COMMON_CONFIG,
 )
 minimal_config3 = dict(
