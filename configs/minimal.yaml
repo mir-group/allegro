@@ -24,12 +24,11 @@ per_edge_type_cutoff:
   # These can be given explicitly for each ordered edge type:
   H:
     H: 2.0   # H-H
-    C: 2.0   # H-C
-    O: 2.0   # H-O
+    C: 2.5   # H-C
+    O: 2.1   # H-O
   # or for all edges with a given center type
   C: 5.0     # C-*  (C-H, C-O, C-C)
   O: 6.0     # O-*
-
 
 # network symmetry
 l_max: 1
