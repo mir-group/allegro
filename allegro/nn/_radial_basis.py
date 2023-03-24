@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Dict, Union
 
 import math
 
@@ -13,20 +13,26 @@ from nequip.nn import GraphModuleMixin
 class AllegroBesselBasis(GraphModuleMixin, torch.nn.Module):
     r_max: float
     PolynomialCutoff_p: float
-    _per_center_type: bool
+    _per_edge_type: bool
+    _num_types: int
 
     def __init__(
         self,
         r_max: float,
-        num_types: int,
         bessel_frequency_cutoff: Optional[float] = None,
         num_bessels_per_basis: Optional[int] = None,
-        per_type_cutoff: Optional[List[float]] = None,
+        per_edge_type_cutoff: Optional[
+            Dict[str, Union[float, Dict[str, float]]]
+        ] = None,
+        type_names: Optional[List[str]] = None,
         trainable: bool = True,
         PolynomialCutoff_p: float = 6.0,
         irreps_in=None,
     ):
         r"""Modified Radial Bessel Basis with smooth Polynomial Cutoff, derived from DimeNet: https://arxiv.org/abs/2003.03123
+
+        This basis does not carry the r_max scale dependence of the bessel basis. It is essentially a "normalized sinc basis":
+        https://en.wikipedia.org/wiki/Sinc_function
 
 
         Parameters
@@ -40,9 +46,9 @@ class AllegroBesselBasis(GraphModuleMixin, torch.nn.Module):
         num_bessels_per_basis : int, optional
             Number of Bessel Basis functions. Required if `bessel_frequency_cutoff` not provided.
 
-        per_type_cutoff : list of float, optional
-            If provided, smaller cutoffs than `r_max` can be used on a per-center-atom-type basis.
-            This also as a side effect means that there are separate coefficients for each center atom type.
+        per_type_cutoff : Dict[str, Union[float, Dict[str, float]]], optional
+            If provided, smaller cutoffs than `r_max` can be used on a per-edge-type basis.
+            This also as a side effect means that there are separate coefficients for each edge type.
 
         trainable : bool
             Whether the :math:`n \pi` coefficients are trainable or not.
@@ -53,7 +59,7 @@ class AllegroBesselBasis(GraphModuleMixin, torch.nn.Module):
         self.r_max = float(r_max)
 
         if bessel_frequency_cutoff is not None:
-            assert per_type_cutoff is None
+            assert per_edge_type_cutoff is None
             assert num_bessels_per_basis is None
             # max freq is n pi / r_max
             # => n = (r_max / pi) * bessel_frequency_cutoff
@@ -66,19 +72,34 @@ class AllegroBesselBasis(GraphModuleMixin, torch.nn.Module):
         self.num_basis = num_bessels_per_basis
         self.PolynomialCutoff_p = PolynomialCutoff_p
 
-        self._per_center_type = False
-        if per_type_cutoff is not None:
-            self._per_center_type = True
-            per_type_cutoff = torch.as_tensor(per_type_cutoff)
-            assert per_type_cutoff.shape == (num_types,)
-            assert torch.all(per_type_cutoff > 0)
-            assert torch.all(per_type_cutoff <= r_max)
+        self._num_types = len(type_names)
+        self._per_edge_type = False
+        if per_edge_type_cutoff is not None:
+            self._per_edge_type = True
+            # map dicts from type name to thing into lists
+            per_edge_type_cutoff = {
+                k: (
+                    [e[t] for t in type_names]
+                    if isinstance(e, dict)
+                    else [e] * self._num_types
+                )
+                for k, e in per_edge_type_cutoff.items()
+            }
+            per_edge_type_cutoff = [per_edge_type_cutoff[k] for k in type_names]
+            per_edge_type_cutoff = torch.as_tensor(per_edge_type_cutoff)
+            assert per_edge_type_cutoff.shape == (self._num_types, self._num_types)
+            assert torch.all(per_edge_type_cutoff > 0)
+            assert torch.all(per_edge_type_cutoff <= r_max)
 
             bessel_weights = torch.linspace(
                 start=1.0, end=num_bessels_per_basis, steps=num_bessels_per_basis
-            ).unsqueeze(0) * (math.pi / per_type_cutoff.unsqueeze(-1))
-            # ^ [n_type, n_bessel]
-            rmax_recip = per_type_cutoff.reciprocal()
+            ).unsqueeze(0) * (math.pi / per_edge_type_cutoff.unsqueeze(-1))
+            # ^ [n_type, n_type, n_bessel]
+            # flatten for how its used in forward:
+            bessel_weights = bessel_weights.view(-1, num_bessels_per_basis)
+            rmax_recip = per_edge_type_cutoff.reciprocal()
+            # flatten for how its used in forward:
+            rmax_recip = rmax_recip.view(-1)
         else:
             # We have one set of weights:
             bessel_weights = torch.linspace(
@@ -101,23 +122,25 @@ class AllegroBesselBasis(GraphModuleMixin, torch.nn.Module):
 
     def forward(self, data: AtomicDataDict.Type) -> AtomicDataDict.Type:
         data = AtomicDataDict.with_edge_vectors(data, with_lengths=True)
-        edge_center = data[AtomicDataDict.EDGE_INDEX_KEY][0]
-        center_type = torch.index_select(
-            data[AtomicDataDict.ATOM_TYPE_KEY], 0, edge_center
-        ).squeeze(-1)
         rmax_recip = self._rmax_recip
         bessel_weights = self.bessel_weights
-        if self._per_center_type:
-            # need to go from [n_type] to [n_edge, 1]
-            rmax_recip = torch.index_select(rmax_recip, 0, center_type).unsqueeze(-1)
-            bessel_weights = torch.index_select(bessel_weights, 0, center_type)
+        if self._per_edge_type:
+            edge_type = torch.index_select(
+                data[AtomicDataDict.ATOM_TYPE_KEY],
+                0,
+                data[AtomicDataDict.EDGE_INDEX_KEY].reshape(-1),
+            ).view(2, -1)
+            # convert into row-major NxN matrix index
+            edge_type = edge_type[0] * self._num_types + edge_type[1]
+            # need to go from [n_type, n_type] to [n_edge, 1]
+            rmax_recip = torch.index_select(rmax_recip, 0, edge_type).unsqueeze(-1)
+            bessel_weights = torch.index_select(bessel_weights, 0, edge_type)
 
         r = data[AtomicDataDict.EDGE_LENGTH_KEY].view(-1, 1)  # [z, 1]
 
         x = r * rmax_recip
 
         # [z, 1] * [z, num_basis] = [z, num_basis]
-        # bessel = (2.0 * rmax_recip).sqrt() / r
         bessel = torch.sin(r * bessel_weights) / (math.pi * x)
         # ^ pi is what the 0th Bessel goes to at 0
 
