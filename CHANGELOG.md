@@ -9,6 +9,7 @@ Most recent change on the bottom.
 ## [0.3.0]
 ### Added
 - Hyperparameters `tensors_mixing_mode`, `weight_individual_irreps`, `typexbasis_mode`, `tensor_track_weight_init`, `self_edge_tensor_product`
+- New Bessel basis with hyperparameters `num_bessels_per_basis`, `bessel_frequency_cutoff`, `per_edge_type_cutoff`
 
 ### Changed
 - Resnet normalization scheme
