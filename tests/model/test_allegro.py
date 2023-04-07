@@ -8,13 +8,15 @@ COMMON_CONFIG = {
     "r_max": 4,
     "num_bessels_per_basis": 4,
     "num_bases": 4,
-    "num_types": 3,
-    "type_names": ["H", "C", "O"],
+    "chemical_symbol_to_type": {"H": 0, "C": 1, "O": 2},
     "num_tensor_features": 4,
     "two_body_latent_mlp_latent_dimensions": [32],
     "latent_mlp_latent_dimensions": [32, 32],
     "env_embed_mlp_latent_dimensions": [],
     "edge_eng_mlp_latent_dimensions": [8],
+    # Just in case for when that builder exists:
+    "pair_style": "ZBL",
+    "units": "metal",
 }
 # TODO: test so3 mode when can pass down option to assert equivariance to ignore parity
 minimal_config1 = dict(
@@ -92,6 +94,16 @@ class TestAllegro(BaseEnergyModelTests):
             ),
             (
                 ["allegro.model.Allegro", "StressForceOutput"],
+                [
+                    AtomicDataDict.TOTAL_ENERGY_KEY,
+                    AtomicDataDict.PER_ATOM_ENERGY_KEY,
+                    AtomicDataDict.FORCE_KEY,
+                    AtomicDataDict.STRESS_KEY,
+                    AtomicDataDict.VIRIAL_KEY,
+                ],
+            ),
+            (
+                ["allegro.model.Allegro", "PairPotentialTerm", "StressForceOutput"],
                 [
                     AtomicDataDict.TOTAL_ENERGY_KEY,
                     AtomicDataDict.PER_ATOM_ENERGY_KEY,
