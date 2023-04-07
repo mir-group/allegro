@@ -122,7 +122,10 @@ class AllegroBesselBasis(GraphModuleMixin, torch.nn.Module):
         self._init_irreps(
             irreps_in=irreps_in,
             irreps_out={
-                AtomicDataDict.EDGE_EMBEDDING_KEY: o3.Irreps([(self.num_basis, (0, 1))])
+                AtomicDataDict.EDGE_EMBEDDING_KEY: o3.Irreps(
+                    [(self.num_basis, (0, 1))]
+                ),
+                AtomicDataDict.EDGE_CUTOFF_KEY: "0e",
             },
         )
 
@@ -163,4 +166,5 @@ class AllegroBesselBasis(GraphModuleMixin, torch.nn.Module):
         data[AtomicDataDict.EDGE_EMBEDDING_KEY] = (
             bessel.view(-1, self.num_basis) * cutoff
         )
+        data[AtomicDataDict.EDGE_CUTOFF_KEY] = cutoff
         return data
