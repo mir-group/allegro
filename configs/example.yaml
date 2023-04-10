@@ -81,6 +81,10 @@ two_body_latent_mlp_nonlinearity: silu
 # weight initialization of the 2-body embedding MLP
 two_body_latent_mlp_initialization: uniform
 
+# radial_basis_mlp_bfloat16: true
+# two_body_latent_mlp_bfloat16: true
+# latent_mlp_bfloat16: true
+
 # hidden layer dimensions of the latent MLP
 # these MLPs are cheap if you have have large l/env_embed_multiplicity, so a good place to put model capacity if you can afford it
 # only if you are in the ultra-fast/scalable regime, make these smaller
