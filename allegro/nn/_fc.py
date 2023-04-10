@@ -32,6 +32,7 @@ class ScalarMLP(GraphModuleMixin, torch.nn.Module):
         mlp_nonlinearity: Optional[str] = "silu",
         mlp_initialization: str = "uniform",
         mlp_bias: bool = False,
+        mlp_bfloat16: bool = False,
         field: str = AtomicDataDict.NODE_FEATURES_KEY,
         out_field: Optional[str] = None,
         irreps_in=None,
@@ -53,6 +54,7 @@ class ScalarMLP(GraphModuleMixin, torch.nn.Module):
             mlp_nonlinearity=mlp_nonlinearity,
             mlp_initialization=mlp_initialization,
             mlp_bias=mlp_bias,
+            mlp_bfloat16=mlp_bfloat16,
         )
         self.irreps_out[self.out_field] = o3.Irreps(
             [(self._module.out_features, (0, 1))]
@@ -68,6 +70,7 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
 
     in_features: int
     out_features: int
+    use_bfloat16: bool
 
     def __init__(
         self,
@@ -77,6 +80,7 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
         mlp_nonlinearity: Optional[str] = "silu",
         mlp_initialization: str = "uniform",
         mlp_bias: bool = False,
+        mlp_bfloat16: bool = False,
     ):
         super().__init__()
         assert not mlp_bias  # guard against accidents
@@ -115,9 +119,14 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
         for layer, (h_in, h_out) in enumerate(zip(dimensions, dimensions[1:])):
             w = torch.empty(h_in, h_out)
             _init_weight(w, mlp_initialization, allow_orthogonal=True)
+            if mlp_bfloat16:
+                w = w.to(torch.bfloat16)
             params[f"_weight_{layer}"] = w
             if mlp_bias:
-                params[f"_bias_{layer}"] = torch.zeros(1, h_out)
+                b = torch.zeros(1, h_out)
+                if mlp_bfloat16:
+                    b = b.to(torch.bfloat16)
+                params[f"_bias_{layer}"] = b
 
         # generate code
         features = Proxy(graph.placeholder("x"))
@@ -131,7 +140,13 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
                 for layer in range(len(dimensions) - 1)
             ]
         else:
-            base.register_buffer("_bias_dummy", torch.as_tensor(0.0))
+            base.register_buffer(
+                "_bias_dummy",
+                torch.as_tensor(
+                    0.0,
+                    dtype=torch.bfloat16 if mlp_bfloat16 else torch.get_default_dtype(),
+                ),
+            )
             biases = [Proxy(graph.get_attr("_bias_dummy"))] * (len(dimensions) - 1)
 
         if (len(weights) > 1) and (not mlp_bias) and (nonlinearity is None):
@@ -181,6 +196,10 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
             setattr(base, pname, torch.nn.Parameter(p))
 
         self._codegen_register({"_forward": fx.GraphModule(base, graph)})
+        self.use_bfloat16 = mlp_bfloat16
 
     def forward(self, x):
-        return self._forward(x)
+        if self.use_bfloat16:
+            return self._forward(x.to(torch.bfloat16)).to(x.dtype)
+        else:
+            return self._forward(x)
