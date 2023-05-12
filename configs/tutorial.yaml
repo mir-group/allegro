@@ -89,7 +89,7 @@ loss_coeffs:
 
 # optimizer
 optimizer_name: Adam
-optimizer_params:
+optimizer_kwargs:
   amsgrad: false
   betas: !!python/tuple
   - 0.9

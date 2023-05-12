@@ -21,6 +21,11 @@ dataset_seed: 123456
 # set true if a restarted run should append to the previous log file
 append: true
 
+# see https://arxiv.org/abs/2304.10061 for discussion of numerical precision
+default_dtype: float64
+model_dtype: float32
+allow_tf32: true    # consider setting to false if you plan to mix training/inference over any devices that are not NVIDIA Ampere or later
+
 # -- network --
 # tell nequip which modules to build
 model_builders:
@@ -38,21 +43,15 @@ avg_num_neighbors: auto
 
 # radial basis
 # set true to train the bessel roots
-BesselBasis_trainable: true
+AllegroBesselBasis_trainable: true
 # determine the highest spatial frequency in the Bessel basis, which indirectly sets the number of basis functions
 bessel_frequency_cutoff: 4  # Angstrom^-1
-# for a trainable Bessel basis, you can optionally include multiple Bessel bases with independent trainable parameters
-num_bases: 1
+# or set directly
+# num_bessels_per_basis: 8
 
 # p-parameter in envelope function, as proposed in Klicpera, J. et al., arXiv:2003.03123
 PolynomialCutoff_p: 6  
 
-# how to combine atom type embeddings and the radial basis in the input to the Allegro layers
-# "product" indicates an elementwise (i.e. channelwise) product between type and basis embeddings
-# "cat" indicates a simple concatenation of atom type and radial basis embeddings
-typexbasis_mode: product
-# if "product" is specified, `basis_mlp_*` options can also be specified for an MLP that embeds the radial basis
-# to the same dimension as the type embedding in preparation for that channel/elementwise multiplication.
 
 # symmetry
 # maximum order l to use in spherical harmonics embedding, 1 is baseline (fast), 2 is more accurate, but slower, 3 highly accurate but slow
@@ -157,9 +156,8 @@ chemical_symbol_to_type:
 # logging
 # whether to use weight and biases (see wandb.ai)
 wandb: false
-
 # project name in wandb
-wandb_project: aspirin
+# wandb_project: aspirin
 
 # the same as python logging, e.g. warning, info, debug, error. case insensitive
 verbose: debug
@@ -212,7 +210,7 @@ loss_coeffs:
 # optimizer
 # default optimizer is Adam 
 optimizer_name: Adam
-optimizer_params:
+optimizer_kwargs:
   amsgrad: false
   betas: !!python/tuple
   - 0.9
