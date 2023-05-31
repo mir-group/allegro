@@ -22,9 +22,9 @@ from allegro._keys import EDGE_FEATURES, EDGE_ENERGY
 from nequip.model import builder_utils
 
 
-def Allegro(config, initialize: bool, dataset: Optional[AtomicDataset] = None):
-    logging.debug("Building Allegro model...")
-
+def _allegro_config_preprocess(
+    config, initialize: bool, dataset: Optional[AtomicDataset] = None
+):
     # Handle avg num neighbors auto
     builder_utils.add_avg_num_neighbors(
         config=config, initialize=initialize, dataset=dataset
@@ -58,6 +58,12 @@ def Allegro(config, initialize: bool, dataset: Optional[AtomicDataset] = None):
         )
         config["irreps_edge_sh"] = irreps_edge_sh
         config["tensor_track_allowed_irreps"] = tensor_track_allowed_irreps
+
+
+def Allegro(config, initialize: bool, dataset: Optional[AtomicDataset] = None):
+    logging.debug("Building Allegro model...")
+
+    _allegro_config_preprocess(config, initialize=initialize, dataset=dataset)
 
     layers = {
         # -- Encode --
