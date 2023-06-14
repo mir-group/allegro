@@ -70,6 +70,7 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
 
     in_features: int
     out_features: int
+    num_layers: int
     use_bfloat16: bool
 
     def __init__(
@@ -101,6 +102,7 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
         )
         assert len(dimensions) >= 2  # Must have input and output dim
         num_layers = len(dimensions) - 1
+        self.num_layers = num_layers
 
         self.in_features = dimensions[0]
         self.out_features = dimensions[-1]
