@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 import math
 
 import torch
@@ -75,6 +75,7 @@ class EdgewiseEnergySum(GraphModuleMixin, torch.nn.Module):
         avg_num_neighbors: Optional[float] = None,
         normalize_edge_energy_sum: bool = True,
         per_edge_species_scale: bool = False,
+        per_edge_species_scales_mask: Optional[List[List[float]]] = None,
         irreps_in={},
     ):
         """Sum edges into nodes."""
@@ -88,10 +89,24 @@ class EdgewiseEnergySum(GraphModuleMixin, torch.nn.Module):
         self._factor = None
         if normalize_edge_energy_sum and avg_num_neighbors is not None:
             self._factor = 1.0 / math.sqrt(avg_num_neighbors)
-
+            
         self.per_edge_species_scale = per_edge_species_scale
+        self.has_per_edge_species_scales_mask = per_edge_species_scales_mask is not None
+        if self.has_per_edge_species_scales_mask:
+            if not self.per_edge_species_scale:
+                raise Exception("If per_edge_species_scales_mask is used, then per_edge_species_scale must be True")
+        
         if self.per_edge_species_scale:
             self.per_edge_scales = torch.nn.Parameter(torch.ones(num_types, num_types))
+            if self.has_per_edge_species_scales_mask:
+                m = torch.as_tensor( [ [ float(x) for x in y ] for y in per_edge_species_scales_mask ] )
+                if m.shape[0] != num_types or m.shape[1] != num_types:
+                    raise Exception(f"per_edge_species_scales_mask should be ({num_types,num_types}), but is {m.shape}")
+                for i in range(num_types):
+                    for j in range(num_types):
+                        if m[i,j] != m[j,i]:
+                            raise Exception(f"per_edge_species_scales_mask should be symmetric. Check elements {i},{j}")
+                self.per_edge_scales_mask = torch.nn.Parameter(m,requires_grad=False)
         else:
             self.register_buffer("per_edge_scales", torch.Tensor())
 
@@ -105,9 +120,16 @@ class EdgewiseEnergySum(GraphModuleMixin, torch.nn.Module):
         neighbor_species = species[edge_neighbor]
 
         if self.per_edge_species_scale:
-            edge_eng = edge_eng * self.per_edge_scales[
-                center_species, neighbor_species
-            ].unsqueeze(-1)
+            if self.has_per_edge_species_scales_mask:
+                edge_eng = edge_eng * (self.per_edge_scales_mask[
+                    center_species, neighbor_species
+                    ] * self.per_edge_scales[
+                    center_species, neighbor_species
+                ]).unsqueeze(-1)
+            else:
+                edge_eng = edge_eng * self.per_edge_scales[
+                    center_species, neighbor_species
+                ].unsqueeze(-1)
 
         atom_eng = scatter(edge_eng, edge_center, dim=0, dim_size=len(species))
         factor: Optional[float] = self._factor  # torchscript hack for typing
