@@ -110,6 +110,10 @@ class EdgewiseEnergySum(GraphModuleMixin, torch.nn.Module):
         else:
             self.register_buffer("per_edge_scales", torch.Tensor())
 
+        if not self.has_per_edge_species_scales_mask:
+            self.register_buffer("per_edge_scales_mask",torch.Tensor())
+
+            
     def forward(self, data: AtomicDataDict.Type) -> AtomicDataDict.Type:
         edge_center = data[AtomicDataDict.EDGE_INDEX_KEY][0]
         edge_neighbor = data[AtomicDataDict.EDGE_INDEX_KEY][1]
