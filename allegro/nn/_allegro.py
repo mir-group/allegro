@@ -152,7 +152,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             if layer_idx == 0:
                 # Add parity irreps
                 ir_out = []
-                for (mul, ir) in env_embed_irreps:
+                for mul, ir in env_embed_irreps:
                     if self.nonscalars_include_parity:
                         # add both parity options
                         ir_out.append((1, (ir.l, 1)))
@@ -498,11 +498,12 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
 
             # Compute latents
             for i in range(len(latent_inputs_to_cat)):
-                oldshape=latent_inputs_to_cat[i].shape
-                if len(latent_inputs_to_cat[i].shape)==1:
-                    latent_inputs_to_cat[i]=\
-                        latent_inputs_to_cat[i].reshape((oldshape[0],1))
-            
+                oldshape = latent_inputs_to_cat[i].shape
+                if len(latent_inputs_to_cat[i].shape) == 1:
+                    latent_inputs_to_cat[i] = latent_inputs_to_cat[i].reshape(
+                        (oldshape[0], 1)
+                    )
+
             new_latents = latent(torch.cat(latent_inputs_to_cat, dim=-1)[prev_mask])
             # Apply cutoff, which propagates through to everything else
             new_latents = cutoff_coeffs[active_edges].unsqueeze(-1) * new_latents
@@ -590,8 +591,10 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             # we know scalars are first
 
             oldshape = features[:, :, : self._n_scalar_outs[layer_index]].shape
-            newshape = (oldshape[0],oldshape[1]*oldshape[2])
-            scalars = features[:, :, : self._n_scalar_outs[layer_index]].reshape( newshape )
+            newshape = (oldshape[0], oldshape[1] * oldshape[2])
+            scalars = features[:, :, : self._n_scalar_outs[layer_index]].reshape(
+                newshape
+            )
             # The -1 breaks when there's an atom without an edge
             # scalars = features[:, :, : self._n_scalar_outs[layer_index]].reshape(
             #     features.shape[0], -1

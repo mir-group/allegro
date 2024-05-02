@@ -32,9 +32,11 @@ class EdgewiseReduce(GraphModuleMixin, torch.nn.Module):
         self.out_field = f"{reduce}_{field}" if out_field is None else out_field
         self._init_irreps(
             irreps_in=irreps_in,
-            irreps_out={self.out_field: irreps_in[self.field]}
-            if self.field in irreps_in
-            else {},
+            irreps_out=(
+                {self.out_field: irreps_in[self.field]}
+                if self.field in irreps_in
+                else {}
+            ),
         )
         self._factor = None
         if normalize_edge_reduce and avg_num_neighbors is not None:
@@ -103,14 +105,13 @@ class EdgewiseEnergySum(GraphModuleMixin, torch.nn.Module):
         species = data[AtomicDataDict.ATOM_TYPE_KEY].squeeze(-1)
 
         if len(species.shape) == 0:
-            newshape=list(edge_eng.shape)
-            newshape[0]=1
-            data[AtomicDataDict.PER_ATOM_ENERGY_KEY] = \
-                torch.zeros( newshape,
-                             dtype=edge_eng.dtype,
-                             device=edge_eng.device )
+            newshape = list(edge_eng.shape)
+            newshape[0] = 1
+            data[AtomicDataDict.PER_ATOM_ENERGY_KEY] = torch.zeros(
+                newshape, dtype=edge_eng.dtype, device=edge_eng.device
+            )
             return data
-        
+
         center_species = species[edge_center]
         neighbor_species = species[edge_neighbor]
 
