@@ -1,0 +1,176 @@
+# general
+root: results/copper-tutorial
+run_name: cu
+seed: 123456
+dataset_seed: 123456
+append: true
+default_dtype: float32
+
+# -- network --
+model_builders:
+ - allegro.model.Allegro
+ # the typical model builders from `nequip` can still be used:
+ - PerSpeciesRescale
+ - ForceOutput
+ - RescaleEnergyEtc
+
+# cutoffs
+r_max: 5.0
+avg_num_neighbors: auto
+
+# radial basis
+BesselBasis_trainable: true
+PolynomialCutoff_p: 6   
+
+# symmetry
+l_max: 1
+parity: o3_full   
+
+# Allegro layers:
+num_layers: 1
+env_embed_multiplicity: 8
+embed_initial_edge: true
+
+two_body_latent_mlp_latent_dimensions: [32, 64, 128]
+two_body_latent_mlp_nonlinearity: silu
+two_body_latent_mlp_initialization: uniform
+
+latent_mlp_latent_dimensions: [128]
+latent_mlp_nonlinearity: silu
+latent_mlp_initialization: uniform
+latent_resnet: true
+
+env_embed_mlp_latent_dimensions: []
+env_embed_mlp_nonlinearity: null
+env_embed_mlp_initialization: uniform
+
+# - end allegro layers -
+
+# Final MLP to go from Allegro latent space to edge energies:
+edge_eng_mlp_latent_dimensions: [32]
+edge_eng_mlp_nonlinearity: null
+edge_eng_mlp_initialization: uniform
+
+# -- data --
+dataset: ase                                                                   
+dataset_file_name: ./Cu_data/Cu_EMT_slab.xyz                      # path to data set file
+ase_args:
+  format: extxyz
+
+
+#
+# For QM/MM Delta MLP models, in which the QM/QM and QM/MM interactions
+# are corrected, we need to distinguish between "QM atom types" and
+# "MM atom types".  One can not use the element symbols for this purpose;
+# instead, the extended xyz file needs to include an integer array of
+# "atom_types" values. The elements are 1-based integers.
+# include_keys causes the atom type integers to be read from the file.
+#
+
+include_keys:
+  - atom_types
+
+#
+# type_names is used to assign each atom_type to an "atom type name".
+# In the DeePMD-kit version of the DPRc model (DOI: 10.1021/acs.jctc.1c00201),
+# the atom type names are either:
+#   the element symbol (for QM atoms),
+#   the element symbol prefixed by "m" (for MM atoms),
+#   OW or HW for MM water oxygens and hydrogens.
+#
+
+type_names:
+  - Cu
+  - mCu
+
+
+# logging
+wandb: false
+#wandb_project: allegro-tutorial
+verbose: info
+log_batch_freq: 10
+
+# training
+n_train: 1
+n_val: 0
+batch_size: 1
+max_epochs: 100
+learning_rate: 0.002
+train_val_split: random
+shuffle: true
+metrics_key: validation_loss
+
+# use an exponential moving average of the weights
+use_ema: true
+ema_decay: 0.99
+ema_use_num_updates: true
+
+# loss function
+loss_coeffs:
+  forces: 1.
+  total_energy:
+    - 1.
+    - PerAtomMSELoss
+
+# optimizer
+optimizer_name: Adam
+
+metrics_components:
+  - - forces                               # key 
+    - mae                                  # "rmse" or "mae"
+  - - forces
+    - rmse
+  - - total_energy
+    - mae    
+  - - total_energy
+    - mae
+    - PerAtom: True                        # if true, energy is normalized by the number of atoms
+
+# lr scheduler, drop lr if no improvement for 50 epochs
+lr_scheduler_name: ReduceLROnPlateau
+lr_scheduler_patience: 50
+lr_scheduler_factor: 0.5
+
+early_stopping_lower_bounds:
+  LR: 1.0e-5
+
+early_stopping_patiences:
+  validation_loss: 100
+
+
+global_rescale_shift: null
+global_rescale_shift_trainable: false
+global_rescale_scale: null
+global_rescale_scale_trainable: false
+per_species_rescale_arguments_in_dataset_units: true
+per_species_rescale_scales_trainable: true
+#per_species_rescale_scales: dataset_per_atom_total_energy_std
+per_species_rescale_shifts_trainable: true
+per_species_rescale_shifts: dataset_per_species_total_energy_mean
+
+#
+# per_species_rescale_shifts_mask = List[bool]
+#    The length of the list must be the same as the number of atom types.
+#    If an element is false, then the atomic shift parameter for that type
+#    is ignored.  In the context of the QM/MM Delta MLP correction, in which
+#    the QM/QM and QM/MM interactions are corrected (but the MM/MM interactions
+#    are not corrected), then the QM atom types would have "true" values and
+#    the MM atom types would have "false" values.
+#
+
+per_species_rescale_shifts_mask: [ true, false ]
+
+
+#
+# per_edge_species_scales_mask = List[List[bool]]
+#    This should be a NumAtomTypes x NumAtomTypes symmetric matrix of
+#    bool values. If an element is false, then all edges between the
+#    two atom types are ignored.  In the context of the QM/MM Delta
+#    MLP correction, in which the QM/QM and QM/MM interactions are corrected
+#    (but the MM/MM interactions are not corrected), then all MM/MM
+#    elements should be false, and all QM/QM and QM/MM elements should be
+#    true.  per_edge_species_scale must be true to use this option.
+#
+
+per_edge_species_scale: true
+per_edge_species_scales_mask: [ [true,true], [true,false] ]
