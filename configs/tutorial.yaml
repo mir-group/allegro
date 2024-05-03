@@ -91,13 +91,6 @@ loss_coeffs:
 
 # optimizer
 optimizer_name: Adam
-optimizer_params:
-  amsgrad: false
-  betas: !!python/tuple
-  - 0.9
-  - 0.999
-  eps: 1.0e-08
-  weight_decay: 0.
 
 metrics_components:
   - - forces                               # key 
