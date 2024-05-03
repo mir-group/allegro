@@ -57,23 +57,25 @@ l_max: 2
 parity: o3_full  
 
 # number of tensor product layers, 1-3 usually best, more is more accurate but slower
-num_layers: 3
+num_layers: 2
 
 # number of features, more is more accurate but slower, 1, 4, 8, 16, 64, 128 are good options to try depending on data set
-env_embed_multiplicity: 32
+env_embed_multiplicity: 64
 
 # whether or not to embed the initial edge, true often works best
 embed_initial_edge: true
 
 # hidden layer dimensions of the 2-body embedding MLP
-two_body_latent_mlp_latent_dimensions: [64, 128, 256, 512]
+two_body_latent_mlp_latent_dimensions: [128, 256, 512, 1024]
 # nonlinearity used in the 2-body embedding MLP
 two_body_latent_mlp_nonlinearity: silu
 # weight initialization of the 2-body embedding MLP
 two_body_latent_mlp_initialization: uniform
 
 # hidden layer dimensions of the latent MLP
-latent_mlp_latent_dimensions: [512]
+# these MLPs are cheap if you have have large l/env_embed_multiplicity, so a good place to put model capacity if you can afford it
+# only if you are in the ultra-fast/scalable regime, make these smaller
+latent_mlp_latent_dimensions: [1024, 1024, 1024]
 
 # nonlinearity used in the latent MLP
 latent_mlp_nonlinearity: silu
@@ -109,7 +111,7 @@ edge_eng_mlp_initialization: uniform
 # -- data --
 # there are two options to specify a dataset, npz or ase
 # npz works with npz files, ase can ready any format that ase.io.read can read
-# in most cases working with the ase option and an extxyz file is by far the simplest way to do it and we strongly recommend using this
+# IMPORTANT: in most cases working with the ase option and an extxyz file is by far the simplest way to do it and we strongly recommend using this
 # simply provide a single extxyz file that contains the structures together with energies and forces (generated with ase.io.write(atoms, format='extxyz', append=True))
 # for a simple snippet to do this, see the gists here: https://github.com/simonbatzner
 
@@ -148,7 +150,6 @@ wandb_project: aspirin
 verbose: debug
 
 # training
-
 # number of training samples to use
 n_train: 950
 
@@ -162,7 +163,7 @@ batch_size: 5
 max_epochs: 1000000
 
 # learning rate, we found values between 0.002 and 0.0005 to work best - this is often one of the most important hyperparameters to tune
-learning_rate: 0.002
+learning_rate: 0.001
 
 # can be random or sequential. if sequential, first n_train elements are training, next n_val are val, else random, usually random is the right choice
 train_val_split: random
