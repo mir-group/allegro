@@ -152,7 +152,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             if layer_idx == 0:
                 # Add parity irreps
                 ir_out = []
-                for (mul, ir) in env_embed_irreps:
+                for mul, ir in env_embed_irreps:
                     if self.nonscalars_include_parity:
                         # add both parity options
                         ir_out.append((1, (ir.l, 1)))

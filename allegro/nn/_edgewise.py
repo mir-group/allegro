@@ -32,9 +32,11 @@ class EdgewiseReduce(GraphModuleMixin, torch.nn.Module):
         self.out_field = f"{reduce}_{field}" if out_field is None else out_field
         self._init_irreps(
             irreps_in=irreps_in,
-            irreps_out={self.out_field: irreps_in[self.field]}
-            if self.field in irreps_in
-            else {},
+            irreps_out=(
+                {self.out_field: irreps_in[self.field]}
+                if self.field in irreps_in
+                else {}
+            ),
         )
         self._factor = None
         if normalize_edge_reduce and avg_num_neighbors is not None:
@@ -89,31 +91,38 @@ class EdgewiseEnergySum(GraphModuleMixin, torch.nn.Module):
         self._factor = None
         if normalize_edge_energy_sum and avg_num_neighbors is not None:
             self._factor = 1.0 / math.sqrt(avg_num_neighbors)
-            
+
         self.per_edge_species_scale = per_edge_species_scale
         self.has_per_edge_species_scales_mask = per_edge_species_scales_mask is not None
         if self.has_per_edge_species_scales_mask:
             if not self.per_edge_species_scale:
-                raise Exception("If per_edge_species_scales_mask is used, then per_edge_species_scale must be True")
-        
+                raise Exception(
+                    "If per_edge_species_scales_mask is used, then per_edge_species_scale must be True"
+                )
+
         if self.per_edge_species_scale:
             self.per_edge_scales = torch.nn.Parameter(torch.ones(num_types, num_types))
             if self.has_per_edge_species_scales_mask:
-                m = torch.as_tensor( [ [ float(x) for x in y ] for y in per_edge_species_scales_mask ] )
+                m = torch.as_tensor(
+                    [[float(x) for x in y] for y in per_edge_species_scales_mask]
+                )
                 if m.shape[0] != num_types or m.shape[1] != num_types:
-                    raise Exception(f"per_edge_species_scales_mask should be ({num_types,num_types}), but is {m.shape}")
+                    raise Exception(
+                        f"per_edge_species_scales_mask should be ({num_types,num_types}), but is {m.shape}"
+                    )
                 for i in range(num_types):
                     for j in range(num_types):
-                        if m[i,j] != m[j,i]:
-                            raise Exception(f"per_edge_species_scales_mask should be symmetric. Check elements {i},{j}")
-                self.per_edge_scales_mask = torch.nn.Parameter(m,requires_grad=False)
+                        if m[i, j] != m[j, i]:
+                            raise Exception(
+                                f"per_edge_species_scales_mask should be symmetric. Check elements {i},{j}"
+                            )
+                self.per_edge_scales_mask = torch.nn.Parameter(m, requires_grad=False)
         else:
             self.register_buffer("per_edge_scales", torch.Tensor())
 
         if not self.has_per_edge_species_scales_mask:
-            self.register_buffer("per_edge_scales_mask",torch.Tensor())
+            self.register_buffer("per_edge_scales_mask", torch.Tensor())
 
-            
     def forward(self, data: AtomicDataDict.Type) -> AtomicDataDict.Type:
         edge_center = data[AtomicDataDict.EDGE_INDEX_KEY][0]
         edge_neighbor = data[AtomicDataDict.EDGE_INDEX_KEY][1]
@@ -125,11 +134,10 @@ class EdgewiseEnergySum(GraphModuleMixin, torch.nn.Module):
 
         if self.per_edge_species_scale:
             if self.has_per_edge_species_scales_mask:
-                edge_eng = edge_eng * (self.per_edge_scales_mask[
-                    center_species, neighbor_species
-                    ] * self.per_edge_scales[
-                    center_species, neighbor_species
-                ]).unsqueeze(-1)
+                edge_eng = edge_eng * (
+                    self.per_edge_scales_mask[center_species, neighbor_species]
+                    * self.per_edge_scales[center_species, neighbor_species]
+                ).unsqueeze(-1)
             else:
                 edge_eng = edge_eng * self.per_edge_scales[
                     center_species, neighbor_species
