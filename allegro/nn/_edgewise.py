@@ -101,6 +101,15 @@ class EdgewiseEnergySum(GraphModuleMixin, torch.nn.Module):
 
         edge_eng = data[_keys.EDGE_ENERGY]
         species = data[AtomicDataDict.ATOM_TYPE_KEY].squeeze(-1)
+
+        if len(species.shape) == 0:
+            newshape = list(edge_eng.shape)
+            newshape[0] = 1
+            data[AtomicDataDict.PER_ATOM_ENERGY_KEY] = torch.zeros(
+                newshape, dtype=edge_eng.dtype, device=edge_eng.device
+            )
+            return data
+
         center_species = species[edge_center]
         neighbor_species = species[edge_neighbor]
 

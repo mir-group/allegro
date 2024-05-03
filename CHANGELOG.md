@@ -10,3 +10,4 @@ Most recent change on the bottom.
 
 ### Fixed
 - Typo of `latent_resent` -> `latent_resnet`
+- Allow calculation of well-separated dimers when the batch has no edges
