@@ -9,4 +9,5 @@ Most recent change on the bottom.
 ## [Unreleased]
 
 ### Fixed
+- `per_edge_species_scales_mask=List[List[bool]]` which acts like a elementwise mask that turns on/off edge energies between atom type pairs
 - Typo of `latent_resent` -> `latent_resnet`
