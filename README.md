@@ -8,6 +8,8 @@ In particular, `allegro` implements the Allegro model as an **extension package*
 
 
 ## Installation
+**Please note that this package CANNOT be installed from PyPI as `pip install allegro`.**
+
 `allegro` requires the `nequip` package and its dependencies; please see the [NequIP installation instructions](https://github.com/mir-group/nequip#installation) for details.
 
 Once `nequip` is installed, you can install `allegro` from source by running:
