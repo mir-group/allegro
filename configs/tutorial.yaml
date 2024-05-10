@@ -33,7 +33,7 @@ two_body_latent_mlp_latent_dimensions: [32, 64, 128]
 two_body_latent_mlp_nonlinearity: silu
 two_body_latent_mlp_initialization: uniform
 
-latent_mlp_latent_dimensions: [128]
+latent_mlp_latent_dimensions: [128, 128]
 latent_mlp_nonlinearity: silu
 latent_mlp_initialization: uniform
 latent_resnet: true
