@@ -4,14 +4,13 @@ run_name: si
 seed: 123456
 dataset_seed: 123456
 append: true
-default_dtype: float32
 
 # -- network --
 model_builders:
  - allegro.model.Allegro
  # the typical model builders from `nequip` can still be used:
  - PerSpeciesRescale
- - ForceOutput
+ - StressForceOutput
  - RescaleEnergyEtc
 
 # cutoffs
@@ -28,14 +27,13 @@ parity: o3_full
 
 # Allegro layers:
 num_layers: 1
-env_embed_multiplicity: 8
-embed_initial_edge: true
+num_tensor_features: 8
 
 two_body_latent_mlp_latent_dimensions: [32, 64, 128]
 two_body_latent_mlp_nonlinearity: silu
 two_body_latent_mlp_initialization: uniform
 
-latent_mlp_latent_dimensions: [128]
+latent_mlp_latent_dimensions: [128, 128]
 latent_mlp_nonlinearity: silu
 latent_mlp_initialization: uniform
 latent_resnet: true
@@ -91,7 +89,7 @@ loss_coeffs:
 
 # optimizer
 optimizer_name: Adam
-optimizer_params:
+optimizer_kwargs:
   amsgrad: false
   betas: !!python/tuple
   - 0.9

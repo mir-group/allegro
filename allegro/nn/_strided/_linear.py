@@ -11,6 +11,7 @@ from e3nn.o3._tensor_product._codegen import _sum_tensors
 from opt_einsum_fx import jitable, optimize_einsums_full
 
 from ._layout import StridedLayout
+from .._misc import _init_weight
 
 
 class Instruction(NamedTuple):
@@ -25,13 +26,14 @@ def codegen_strided_linear(
     normalization: str = "component",
     internal_weights: bool = False,
     shared_weights: bool = False,
-    pad_to_alignment: int = 1,
+    initialization: str = "uniform",
+    alpha: float = 1.0,
 ) -> Optional[fx.GraphModule]:
     """Returns None if strided doesn't make sense for this TP."""
     # Check if irreps can be strided
     try:
-        layout_in = StridedLayout(irreps_in, pad_to_multiple=pad_to_alignment)
-        layout_out = StridedLayout(irreps_out, pad_to_multiple=pad_to_alignment)
+        layout_in = StridedLayout(irreps_in)
+        layout_out = StridedLayout(irreps_out)
     except ValueError:
         # one cannot be strided
         return None
@@ -131,6 +133,7 @@ def codegen_strided_linear(
         (
             (1.0 / sqrt(sum(layout_in.mul for ins in instructions if ins.i_out == i)))
             * out
+            * alpha
         )
         if len(ins_per_output[i]) > 0
         else out
@@ -140,14 +143,6 @@ def codegen_strided_linear(
         out = torch.cat(outs, dim=-1)
     else:
         out = outs[0]
-
-    # pad output
-    padding: int = layout_out.base_dim - layout_out.base_irreps.dim
-    if padding > 0:
-        out = torch.nn.functional.pad(
-            out,
-            (0, padding),
-        )
 
     graph_out.output(out.node)
 
@@ -162,6 +157,7 @@ def codegen_strided_linear(
     constants_root = torch.nn.Module()
     if internal_weights:
         constants_root.w = torch.nn.Parameter(torch.randn(w_index))
+        _init_weight(constants_root.w, initialization=initialization)
     graphmod_out = fx.GraphModule(
         constants_root, graph_out, class_name="linear_forward"
     )
@@ -210,8 +206,9 @@ def Linear(
     irreps_out,
     shared_weights: Optional[bool] = None,
     internal_weights: bool = False,
+    initialization: str = "uniform",
     instructions: Optional[List[Tuple[int, int]]] = None,
-    pad_to_alignment: int = 1,
+    alpha: float = 1.0,
 ):
     irreps_in = o3.Irreps(irreps_in)
     irreps_out = o3.Irreps(irreps_out)
@@ -234,7 +231,8 @@ def Linear(
         instructions=instructions,
         shared_weights=shared_weights,
         internal_weights=internal_weights,
-        pad_to_alignment=pad_to_alignment,
+        initialization=initialization,
+        alpha=alpha,
     )
 
     if mod is None:

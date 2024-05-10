@@ -1,9 +1,11 @@
 import torch
 
+from nequip.data import AtomicDataDict
+from nequip.nn import GraphModuleMixin
 from nequip.nn.radial_basis import BesselBasis
 
 
-class NormalizedBasis(torch.nn.Module):
+class NormalizedBasis(GraphModuleMixin, torch.nn.Module):
     """Normalized version of a given radial basis.
 
     Args:
@@ -15,6 +17,7 @@ class NormalizedBasis(torch.nn.Module):
     """
 
     num_basis: int
+    norm_basis_mean_shift: bool
 
     def __init__(
         self,
@@ -23,7 +26,8 @@ class NormalizedBasis(torch.nn.Module):
         original_basis=BesselBasis,
         original_basis_kwargs: dict = {},
         n: int = 4000,
-        norm_basis_mean_shift: bool = True,
+        norm_basis_mean_shift: bool = False,
+        irreps_in=None,
     ):
         super().__init__()
         self.basis = original_basis(**original_basis_kwargs)
@@ -34,6 +38,7 @@ class NormalizedBasis(torch.nn.Module):
         self.n = n
 
         self.num_basis = self.basis.num_basis
+        self.norm_basis_mean_shift = norm_basis_mean_shift
 
         # Uniform distribution on [r_min, r_max)
         with torch.no_grad():
@@ -44,13 +49,23 @@ class NormalizedBasis(torch.nn.Module):
             if norm_basis_mean_shift:
                 basis_std, basis_mean = torch.std_mean(bs, dim=0)
             else:
-                basis_std = bs.square().mean().sqrt()
-                basis_mean = torch.as_tensor(
-                    0.0, device=basis_std.device, dtype=basis_std.dtype
-                )
+                basis_std = bs.square().mean(dim=0).sqrt()
+                basis_mean = torch.Tensor()
 
         self.register_buffer("_mean", basis_mean)
         self.register_buffer("_inv_std", torch.reciprocal(basis_std))
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return (self.basis(x) - self._mean) * self._inv_std
+        self._init_irreps(
+            irreps_in=irreps_in,
+            irreps_out={
+                AtomicDataDict.EDGE_EMBEDDING_KEY: f"{self.basis.num_basis}x0e"
+            },
+        )
+
+    def forward(self, data: AtomicDataDict.Type) -> AtomicDataDict.Type:
+        data = AtomicDataDict.with_edge_vectors(data, with_lengths=True)
+        basis = self.basis(data[AtomicDataDict.EDGE_LENGTH_KEY])
+        if self.norm_basis_mean_shift:
+            basis = basis - self._mean
+        data[AtomicDataDict.EDGE_EMBEDDING_KEY] = basis * self._inv_std
+        return data

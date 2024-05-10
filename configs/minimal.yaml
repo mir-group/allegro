@@ -14,26 +14,38 @@ dataset_seed: 123456
 model_builders:
  - allegro.model.Allegro
  - PerSpeciesRescale
- - ForceOutput
+ - StressForceOutput
  - RescaleEnergyEtc
 
 # cutoffs
 r_max: 6.0
-
+# optionally, you can specify per-edge-type cutoffs to be applied to the initial basis
+# per_edge_type_cutoff:
+#   # These can be given explicitly for each ordered edge type:
+#   H:
+#     H: 2.0   # H-H
+#     C: 2.5   # H-C
+#     O: 2.1   # H-O
+#   # or for all edges with a given center type
+#   C: 5.0     # C-*  (C-H, C-O, C-C)
+#   O: 6.0     # O-*
 # network symmetry
 l_max: 1
 parity: o3_full  
 
 # allegro layers:
-num_layers: 1
-env_embed_multiplicity: 32
+num_layers: 2
+num_tensor_features: 32
 two_body_latent_mlp_latent_dimensions: [32, 64]
 two_body_latent_mlp_nonlinearity: silu
+num_bessels_per_basis: 8
 
-latent_mlp_latent_dimensions: [64]
+latent_mlp_latent_dimensions: [64, 64]
 latent_mlp_nonlinearity: silu
 
 latent_resnet: true
+latent_resnet_coefficients: [1.0, 1.0, 1.0]
+latent_resnet_coefficients_learnable: false
 
 env_embed_mlp_latent_dimensions: []
 env_embed_mlp_nonlinearity: null
@@ -61,7 +73,6 @@ chemical_symbol_to_type:
 
 # logging
 wandb: false
-wandb_project: aspirin
 verbose: info
 
 # training

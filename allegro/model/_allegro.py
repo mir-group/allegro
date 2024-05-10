@@ -6,16 +6,13 @@ from e3nn import o3
 from nequip.data import AtomicDataDict, AtomicDataset
 
 from nequip.nn import SequentialGraphNetwork, AtomwiseReduce
-from nequip.nn.radial_basis import BesselBasis
 
-from nequip.nn.embedding import (
-    OneHotAtomEncoding,
-    SphericalHarmonicEdgeAttrs,
-    RadialBasisEdgeEncoding,
-)
+from nequip.nn.embedding import SphericalHarmonicEdgeAttrs
 
 from allegro.nn import (
     NormalizedBasis,
+    ProductTypeEmbedding,
+    AllegroBesselBasis,
     EdgewiseEnergySum,
     Allegro_Module,
     ScalarMLP,
@@ -25,9 +22,9 @@ from allegro._keys import EDGE_FEATURES, EDGE_ENERGY
 from nequip.model import builder_utils
 
 
-def Allegro(config, initialize: bool, dataset: Optional[AtomicDataset] = None):
-    logging.debug("Building Allegro model...")
-
+def _allegro_config_preprocess(
+    config, initialize: bool, dataset: Optional[AtomicDataset] = None
+):
     # Handle avg num neighbors auto
     builder_utils.add_avg_num_neighbors(
         config=config, initialize=initialize, dataset=dataset
@@ -43,32 +40,50 @@ def Allegro(config, initialize: bool, dataset: Optional[AtomicDataset] = None):
                 l_max, p=(1 if parity_setting == "so3" else -1)
             )
         )
-        nonscalars_include_parity = parity_setting == "o3_full"
+        # set tensor_track_allowed_irreps
+        # note that it is treated as a set, so order doesn't really matter
+        if parity_setting == "o3_full":
+            # we want all irreps up to lmax
+            tensor_track_allowed_irreps = o3.Irreps(
+                [(1, (this_l, p)) for this_l in range(l_max + 1) for p in (1, -1)]
+            )
+        else:
+            # for so3 or o3_restricted, we want only irreps that show up in the original SH
+            tensor_track_allowed_irreps = irreps_edge_sh
         # check consistant
         assert config.get("irreps_edge_sh", irreps_edge_sh) == irreps_edge_sh
         assert (
-            config.get("nonscalars_include_parity", nonscalars_include_parity)
-            == nonscalars_include_parity
+            config.get("tensor_track_allowed_irreps", tensor_track_allowed_irreps)
+            == tensor_track_allowed_irreps
         )
         config["irreps_edge_sh"] = irreps_edge_sh
-        config["nonscalars_include_parity"] = nonscalars_include_parity
+        config["tensor_track_allowed_irreps"] = tensor_track_allowed_irreps
+
+
+def Allegro(config, initialize: bool, dataset: Optional[AtomicDataset] = None):
+    logging.debug("Building Allegro model...")
+
+    _allegro_config_preprocess(config, initialize=initialize, dataset=dataset)
 
     layers = {
         # -- Encode --
         # Get various edge invariants
-        "one_hot": OneHotAtomEncoding,
         "radial_basis": (
-            RadialBasisEdgeEncoding,
+            NormalizedBasis
+            if config.get("use_original_normalized_basis", False)
+            else AllegroBesselBasis
+        ),
+        "typeembed": (
+            ProductTypeEmbedding,
             dict(
-                basis=(
-                    NormalizedBasis
-                    if config.get("normalize_basis", True)
-                    else BesselBasis
+                initial_scalar_embedding_dim=config.get(
+                    "initial_scalar_embedding_dim",
+                    # sane default to the MLP that comes next
+                    config["two_body_latent_mlp_latent_dimensions"][0],
                 ),
-                out_field=AtomicDataDict.EDGE_EMBEDDING_KEY,
             ),
         ),
-        # Get edge nonscalars
+        # Get edge tensors
         "spharm": SphericalHarmonicEdgeAttrs,
         # The core allegro model:
         "allegro": (
@@ -76,7 +91,6 @@ def Allegro(config, initialize: bool, dataset: Optional[AtomicDataset] = None):
             dict(
                 field=AtomicDataDict.EDGE_ATTRS_KEY,  # initial input is the edge SH
                 edge_invariant_field=AtomicDataDict.EDGE_EMBEDDING_KEY,
-                node_invariant_field=AtomicDataDict.NODE_ATTRS_KEY,
             ),
         ),
         "edge_eng": (

@@ -74,7 +74,6 @@ class EdgewiseEnergySum(GraphModuleMixin, torch.nn.Module):
         num_types: int,
         avg_num_neighbors: Optional[float] = None,
         normalize_edge_energy_sum: bool = True,
-        per_edge_species_scale: bool = False,
         irreps_in={},
     ):
         """Sum edges into nodes."""
@@ -89,30 +88,20 @@ class EdgewiseEnergySum(GraphModuleMixin, torch.nn.Module):
         if normalize_edge_energy_sum and avg_num_neighbors is not None:
             self._factor = 1.0 / math.sqrt(avg_num_neighbors)
 
-        self.per_edge_species_scale = per_edge_species_scale
-        if self.per_edge_species_scale:
-            self.per_edge_scales = torch.nn.Parameter(torch.ones(num_types, num_types))
-        else:
-            self.register_buffer("per_edge_scales", torch.Tensor())
-
     def forward(self, data: AtomicDataDict.Type) -> AtomicDataDict.Type:
         edge_center = data[AtomicDataDict.EDGE_INDEX_KEY][0]
-        edge_neighbor = data[AtomicDataDict.EDGE_INDEX_KEY][1]
-
         edge_eng = data[_keys.EDGE_ENERGY]
-        species = data[AtomicDataDict.ATOM_TYPE_KEY].squeeze(-1)
-        center_species = species[edge_center]
-        neighbor_species = species[edge_neighbor]
 
-        if self.per_edge_species_scale:
-            edge_eng = edge_eng * self.per_edge_scales[
-                center_species, neighbor_species
-            ].unsqueeze(-1)
-
-        atom_eng = scatter(edge_eng, edge_center, dim=0, dim_size=len(species))
+        # for numerics it seems safer to make these smaller first before accumulating
         factor: Optional[float] = self._factor  # torchscript hack for typing
         if factor is not None:
-            atom_eng = atom_eng * factor
+            edge_eng = edge_eng * factor
+        atom_eng = scatter(
+            edge_eng,
+            edge_center,
+            dim=0,
+            dim_size=len(data[AtomicDataDict.POSITIONS_KEY]),
+        )
 
         data[AtomicDataDict.PER_ATOM_ENERGY_KEY] = atom_eng
 
