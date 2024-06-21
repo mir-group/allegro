@@ -17,4 +17,5 @@ setup(
     packages=find_packages(include=["allegro", "allegro.*"]),
     install_requires=["nequip>=0.6.0"],
     zip_safe=True,
+    entry_points={"nequip.extension": ["init_always = allegro"]},
 )
