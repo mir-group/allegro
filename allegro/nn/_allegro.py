@@ -1,6 +1,7 @@
 from typing import Optional, List
 import math
 import functools
+import warnings
 
 import torch
 from torch_runstats.scatter import scatter
@@ -342,6 +343,11 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             mlp_output_dimension=None,
         )
         # - end build modules -
+        for l in self.latents + [self.final_latent]:
+            if not l.is_nonlinear:
+                warnings.warn(
+                    f"Latent MLP is linear. Nonlinear latent MLPs are strongly recommended and using linear ones may significantly affect accuracy in some systems. Ensure two_body_latent_mlp_latent_dimensions and latent_mlp_latent_dimensions are at least two entries long."
+                )
 
         # - layer resnet update weights -
         if latent_resnet_coefficients is None:
