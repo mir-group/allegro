@@ -72,6 +72,7 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
     out_features: int
     num_layers: int
     use_bfloat16: bool
+    is_nonlinear: bool
 
     def __init__(
         self,
@@ -106,6 +107,7 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
 
         self.in_features = dimensions[0]
         self.out_features = dimensions[-1]
+        self.is_nonlinear = False  # updated in codegen below
 
         # Code
         params = {}
@@ -189,6 +191,7 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
                 # generate nonlinearity code
                 if nonlinearity is not None and layer < num_layers - 1:
                     features = nonlinearity(features)
+                    self.is_nonlinear = True  # one nonlinearity applied means the whole MLP is nonlinear
                     # add the normalization const in next layer
                     norm_from_last = nonlin_const
 
