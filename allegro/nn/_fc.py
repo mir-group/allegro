@@ -18,6 +18,19 @@ from nequip.nn.nonlinearities import ShiftedSoftPlus
 from ._misc import _init_weight
 
 
+def _to_int_list(arg):
+    # converts str: "64 64 64" to List[int]: [64, 64, 64]
+    # or int: 64 to List[int]: [64]
+    # to simplify parsing of list inputs when using 3rd party code
+    # e.g. to pass inputs to wandb sweep configs
+    if isinstance(arg, str):
+        return [int(x) for x in arg.split()]
+    elif isinstance(arg, int):
+        return [arg]
+    else:
+        return arg
+
+
 @compile_mode("script")
 class ScalarMLP(GraphModuleMixin, torch.nn.Module):
     """Apply an MLP to some scalar field."""
@@ -27,7 +40,7 @@ class ScalarMLP(GraphModuleMixin, torch.nn.Module):
 
     def __init__(
         self,
-        mlp_latent_dimensions: List[int],
+        mlp_latent_dimensions: List[int] | str,
         mlp_output_dimension: Optional[int],
         mlp_nonlinearity: Optional[str] = "silu",
         mlp_initialization: str = "uniform",
@@ -44,6 +57,9 @@ class ScalarMLP(GraphModuleMixin, torch.nn.Module):
             irreps_in=irreps_in,
             required_irreps_in=[self.field],
         )
+
+        mlp_latent_dimensions = _to_int_list(mlp_latent_dimensions)
+
         assert len(self.irreps_in[self.field]) == 1
         assert self.irreps_in[self.field][0].ir == (0, 1)  # scalars
         in_dim = self.irreps_in[self.field][0].mul
@@ -77,7 +93,7 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
     def __init__(
         self,
         mlp_input_dimension: Optional[int],
-        mlp_latent_dimensions: List[int],
+        mlp_latent_dimensions: List[int] | str,
         mlp_output_dimension: Optional[int],
         mlp_nonlinearity: Optional[str] = "silu",
         mlp_initialization: str = "uniform",
@@ -88,6 +104,8 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
         assert not mlp_bias  # guard against accidents
         nonlinearity = {
             None: None,
+            "null": None,
+            "None": None,
             "silu": torch.nn.functional.silu,
             "ssp": ShiftedSoftPlus,
         }[mlp_nonlinearity]
@@ -95,6 +113,8 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
             nonlin_const = normalize2mom(nonlinearity).cst
         else:
             nonlin_const = 1.0
+
+        mlp_latent_dimensions = _to_int_list(mlp_latent_dimensions)
 
         dimensions = (
             ([mlp_input_dimension] if mlp_input_dimension is not None else [])
