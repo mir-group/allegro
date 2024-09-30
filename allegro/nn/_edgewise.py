@@ -32,9 +32,11 @@ class EdgewiseReduce(GraphModuleMixin, torch.nn.Module):
         self.out_field = f"{reduce}_{field}" if out_field is None else out_field
         self._init_irreps(
             irreps_in=irreps_in,
-            irreps_out={self.out_field: irreps_in[self.field]}
-            if self.field in irreps_in
-            else {},
+            irreps_out=(
+                {self.out_field: irreps_in[self.field]}
+                if self.field in irreps_in
+                else {}
+            ),
         )
         self._factor = None
         if normalize_edge_reduce and avg_num_neighbors is not None:
@@ -71,7 +73,6 @@ class EdgewiseEnergySum(GraphModuleMixin, torch.nn.Module):
 
     def __init__(
         self,
-        num_types: int,
         avg_num_neighbors: Optional[float] = None,
         normalize_edge_energy_sum: bool = True,
         irreps_in={},

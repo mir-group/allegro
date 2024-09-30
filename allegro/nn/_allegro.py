@@ -39,7 +39,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         self,
         # required hyperparameters:
         num_layers: int,
-        num_types: int,
+        type_names: List[str],
         r_max: float,
         num_tensor_features: int,
         tensor_track_allowed_irreps: o3.Irreps,
@@ -81,7 +81,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         self.latent_resnet = latent_resnet
         self.num_tensor_features = num_tensor_features
         self.avg_num_neighbors = avg_num_neighbors
-        self.num_types = num_types
+        self.num_types = len(type_names)
         self.self_edge_tensor_product = self_edge_tensor_product
 
         assert tensors_mixing_mode in ("uuulin", "uuup", "uvvp", "p")
