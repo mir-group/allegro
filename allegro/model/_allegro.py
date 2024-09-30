@@ -1,9 +1,8 @@
-from typing import Optional
 import logging
 
 from e3nn import o3
 
-from nequip.data import AtomicDataDict, AtomicDataset
+from nequip.data import AtomicDataDict
 
 from nequip.nn import SequentialGraphNetwork, AtomwiseReduce
 
@@ -19,16 +18,8 @@ from allegro.nn import (
 )
 from allegro._keys import EDGE_FEATURES, EDGE_ENERGY
 
-from nequip.model import builder_utils
 
-
-def _allegro_config_preprocess(
-    config, initialize: bool, dataset: Optional[AtomicDataset] = None
-):
-    # Handle avg num neighbors auto
-    builder_utils.add_avg_num_neighbors(
-        config=config, initialize=initialize, dataset=dataset
-    )
+def _allegro_config_preprocess(config, initialize: bool):
 
     # Handle simple irreps
     if "l_max" in config:
@@ -60,10 +51,10 @@ def _allegro_config_preprocess(
         config["tensor_track_allowed_irreps"] = tensor_track_allowed_irreps
 
 
-def Allegro(config, initialize: bool, dataset: Optional[AtomicDataset] = None):
+def Allegro(config, initialize: bool):
     logging.debug("Building Allegro model...")
 
-    _allegro_config_preprocess(config, initialize=initialize, dataset=dataset)
+    _allegro_config_preprocess(config, initialize=initialize)
 
     layers = {
         # -- Encode --
