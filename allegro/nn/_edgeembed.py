@@ -8,6 +8,8 @@ from nequip.nn import GraphModuleMixin
 
 from ._fc import ScalarMLPFunction
 
+from typing import List
+
 
 @compile_mode("script")
 class ProductTypeEmbedding(GraphModuleMixin, torch.nn.Module):
@@ -22,7 +24,7 @@ class ProductTypeEmbedding(GraphModuleMixin, torch.nn.Module):
 
     def __init__(
         self,
-        num_types: int,
+        type_names: List[str],
         initial_scalar_embedding_dim: int,
         radial_basis_mlp=ScalarMLPFunction,
         radial_basis_mlp_kwargs={},
@@ -30,10 +32,10 @@ class ProductTypeEmbedding(GraphModuleMixin, torch.nn.Module):
     ):
         super().__init__()
         self._init_irreps(irreps_in=irreps_in)
-        self.num_types = num_types
+        self.num_types = len(type_names)
         assert initial_scalar_embedding_dim % 2 == 0
         self.type_embeddings = torch.nn.Parameter(
-            torch.randn(2, num_types, initial_scalar_embedding_dim // 2)
+            torch.randn(2, self.num_types, initial_scalar_embedding_dim // 2)
         )
 
         # default
