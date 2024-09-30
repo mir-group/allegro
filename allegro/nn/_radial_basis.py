@@ -130,6 +130,9 @@ class AllegroBesselBasis(GraphModuleMixin, torch.nn.Module):
         )
 
     def forward(self, data: AtomicDataDict.Type) -> AtomicDataDict.Type:
+        model_dtype = data.get(
+            AtomicDataDict.MODEL_DTYPE_KEY, data[AtomicDataDict.POSITIONS_KEY]
+        ).dtype
         data = AtomicDataDict.with_edge_vectors(data, with_lengths=True)
         rmax_recip = self._rmax_recip
         bessel_weights = self.bessel_weights
@@ -165,6 +168,6 @@ class AllegroBesselBasis(GraphModuleMixin, torch.nn.Module):
 
         data[AtomicDataDict.EDGE_EMBEDDING_KEY] = (
             bessel.view(-1, self.num_basis) * cutoff
-        )
+        ).to(model_dtype)
         data[AtomicDataDict.EDGE_CUTOFF_KEY] = cutoff
         return data
