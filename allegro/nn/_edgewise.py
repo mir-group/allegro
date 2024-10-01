@@ -7,8 +7,6 @@ from torch_runstats.scatter import scatter
 from nequip.data import AtomicDataDict
 from nequip.nn import GraphModuleMixin
 
-from .. import _keys
-
 
 class EdgewiseReduce(GraphModuleMixin, torch.nn.Module):
     """Like ``nequip.nn.AtomwiseReduce``, but accumulating per-edge data into per-atom data."""
@@ -81,7 +79,7 @@ class EdgewiseEnergySum(GraphModuleMixin, torch.nn.Module):
         super().__init__()
         self._init_irreps(
             irreps_in=irreps_in,
-            my_irreps_in={_keys.EDGE_ENERGY: "0e"},
+            my_irreps_in={AtomicDataDict.EDGE_ENERGY_KEY: "0e"},
             irreps_out={AtomicDataDict.PER_ATOM_ENERGY_KEY: "0e"},
         )
 
@@ -91,7 +89,7 @@ class EdgewiseEnergySum(GraphModuleMixin, torch.nn.Module):
 
     def forward(self, data: AtomicDataDict.Type) -> AtomicDataDict.Type:
         edge_center = data[AtomicDataDict.EDGE_INDEX_KEY][0]
-        edge_eng = data[_keys.EDGE_ENERGY]
+        edge_eng = data[AtomicDataDict.EDGE_ENERGY_KEY]
 
         # for numerics it seems safer to make these smaller first before accumulating
         factor: Optional[float] = self._factor  # torchscript hack for typing
