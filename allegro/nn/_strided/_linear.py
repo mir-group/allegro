@@ -131,12 +131,17 @@ def codegen_strided_linear(
     ]
     outs = [
         (
-            (1.0 / sqrt(sum(layout_in.mul for ins in instructions if ins.i_out == i)))
-            * out
-            * alpha
+            (
+                (
+                    1.0
+                    / sqrt(sum(layout_in.mul for ins in instructions if ins.i_out == i))
+                )
+                * out
+                * alpha
+            )
+            if len(ins_per_output[i]) > 0
+            else out
         )
-        if len(ins_per_output[i]) > 0
-        else out
         for i, out in enumerate(outs)
     ]
     if len(outs) > 1:
