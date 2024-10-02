@@ -14,7 +14,6 @@ from nequip.nn import GraphModuleMixin
 from nequip.utils.tp_utils import tp_path_exists
 
 from ._fc import ScalarMLPFunction
-from .. import _keys
 from ._strided import Contracter, MakeWeightedChannels, Linear
 
 
@@ -61,7 +60,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         latent_resnet: bool = True,
         latent_resnet_coefficients: Optional[List[float]] = None,
         latent_resnet_coefficients_learnable: bool = False,
-        latent_out_field: Optional[str] = _keys.EDGE_FEATURES,
+        latent_out_field: Optional[str] = AtomicDataDict.EDGE_FEATURES_KEY,
         # Other:
         irreps_in=None,
     ):
@@ -346,7 +345,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         for l in self.latents + [self.final_latent]:
             if not l.is_nonlinear:
                 warnings.warn(
-                    f"Latent MLP is linear. Nonlinear latent MLPs are strongly recommended and using linear ones may significantly affect accuracy in some systems. Ensure two_body_latent_mlp_latent_dimensions and latent_mlp_latent_dimensions are at least two entries long."
+                    "Latent MLP is linear. Nonlinear latent MLPs are strongly recommended and using linear ones may significantly affect accuracy in some systems. Ensure two_body_latent_mlp_latent_dimensions and latent_mlp_latent_dimensions are at least two entries long."
                 )
 
         # - layer resnet update weights -
