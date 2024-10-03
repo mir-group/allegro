@@ -6,6 +6,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Most recent change on the bottom.
 
+## Unreleased
+
+### Added
+- Allegro readout module
+- MLPs can be configured with `hidden_layer_depth` and `hidden_layer_width` as an alternative to an explicit `hidden_layer_dims` list
+
+### Changed
+- [Breaking] default `tensors_mixing_mode` = `p`
+- [Breaking] initial two-body embedding and `allegro` modules resturctured
+- [Breaking] MLP params use `hidden_layer` instead of `latent`
+
+### Removed
+- [Breaking] `latent_resent` (latents have access to concatenation of previous layers' latents by default)
+- [Breaking] remove `env_embed_mlp`
+- [Breaking] remove `tensors_mixing_mode` = `uuulin`
+- [Breaking] remove `self_edge_tensor_product` as a hyperparameter (fix behavior to be `self_edge_tensor_product=True`)
+
 ## [0.3.0]
 ### Added
 - Hyperparameters `tensors_mixing_mode`, `weight_individual_irreps`, `typexbasis_mode`, `tensor_track_weight_init`, `self_edge_tensor_product`
