@@ -16,10 +16,9 @@ from allegro.nn import (
     Allegro_Module,
     ScalarMLP,
 )
-from allegro._keys import EDGE_FEATURES, EDGE_ENERGY
 
 
-def _allegro_config_preprocess(config, initialize: bool):
+def _allegro_config_preprocess(config):
 
     # Handle simple irreps
     if "l_max" in config:
@@ -51,10 +50,10 @@ def _allegro_config_preprocess(config, initialize: bool):
         config["tensor_track_allowed_irreps"] = tensor_track_allowed_irreps
 
 
-def Allegro(config, initialize: bool):
+def Allegro(config):
     logging.debug("Building Allegro model...")
 
-    _allegro_config_preprocess(config, initialize=initialize)
+    _allegro_config_preprocess(config)
 
     layers = {
         # -- Encode --
@@ -86,7 +85,11 @@ def Allegro(config, initialize: bool):
         ),
         "edge_eng": (
             ScalarMLP,
-            dict(field=EDGE_FEATURES, out_field=EDGE_ENERGY, mlp_output_dimension=1),
+            dict(
+                field=AtomicDataDict.EDGE_FEATURES_KEY,
+                out_field=AtomicDataDict.EDGE_ENERGY_KEY,
+                mlp_output_dimension=1,
+            ),
         ),
         # Sum edgewise energies -> per-atom energies:
         "edge_eng_sum": EdgewiseEnergySum,
