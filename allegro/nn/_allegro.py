@@ -4,13 +4,13 @@ import functools
 import warnings
 
 import torch
-from torch_runstats.scatter import scatter
 
 from e3nn import o3
 from e3nn.util.jit import compile_mode
 
 from nequip.data import AtomicDataDict
 from nequip.nn import GraphModuleMixin
+from nequip.utils import scatter
 from nequip.utils.tp_utils import tp_path_exists
 
 from ._fc import ScalarMLPFunction
