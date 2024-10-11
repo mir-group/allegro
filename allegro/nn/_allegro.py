@@ -47,7 +47,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         field: str = AtomicDataDict.EDGE_ATTRS_KEY,
         edge_invariant_field: str = AtomicDataDict.EDGE_EMBEDDING_KEY,
         self_edge_tensor_product: bool = False,
-        tensors_mixing_mode: str = "uuulin",
+        tensors_mixing_mode: str = "p",
         tensor_track_weight_init: str = "uniform",
         weight_individual_irreps: bool = True,
         # MLP parameters:
