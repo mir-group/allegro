@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Union
 import math
 import operator
 import functools
@@ -40,7 +40,7 @@ class ScalarMLP(GraphModuleMixin, torch.nn.Module):
 
     def __init__(
         self,
-        mlp_latent_dimensions: List[int] | str,
+        mlp_latent_dimensions: Union[List[int], str],
         mlp_output_dimension: Optional[int],
         mlp_nonlinearity: Optional[str] = "silu",
         mlp_initialization: str = "uniform",
@@ -93,7 +93,7 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
     def __init__(
         self,
         mlp_input_dimension: Optional[int],
-        mlp_latent_dimensions: List[int] | str,
+        mlp_latent_dimensions: Union[List[int], str],
         mlp_output_dimension: Optional[int],
         mlp_nonlinearity: Optional[str] = "silu",
         mlp_initialization: str = "uniform",
