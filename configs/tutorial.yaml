@@ -77,9 +77,9 @@ training_module:
     model_builders:
      - allegro.model.Allegro
      # the typical model builders from `nequip` can still be used:
-     - PerTypeEnergyScaleShift
-     - StressForceOutput
-     - RescaleEnergyEtc
+     - nequip.model.PerTypeEnergyScaleShift
+     - nequip.model.StressForceOutput
+     - nequip.model.RescaleEnergyEtc
     
     # bookkeeping
     seed: 123
