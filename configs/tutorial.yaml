@@ -79,55 +79,53 @@ training_module:
      # the typical model builders from `nequip` can still be used:
      - nequip.model.PerTypeEnergyScaleShift
      - nequip.model.StressForceOutput
-     - nequip.model.RescaleEnergyEtc
-    
+
     # bookkeeping
     seed: 123
     type_names: ${model_type_names}
     model_dtype: float32
-  
+
     # cutoffs
     r_max: ${cutoff_radius}
-  
+
     # radial basis
     BesselBasis_trainable: true
     PolynomialCutoff_p: 6   
     num_bessels_per_basis: 8
-  
+
     # symmetry
     l_max: 1
     parity: o3_full   
-    
+
     # Allegro layers:
     num_layers: 1
     num_tensor_features: 8
-    
+
     two_body_latent_mlp_latent_dimensions: [32, 64, 128]
     two_body_latent_mlp_nonlinearity: silu
     two_body_latent_mlp_initialization: uniform
-    
+
     latent_mlp_latent_dimensions: [128, 128]
     latent_mlp_nonlinearity: silu
     latent_mlp_initialization: uniform
     latent_resnet: true
-    
+
     env_embed_mlp_latent_dimensions: []
     env_embed_mlp_nonlinearity: null
     env_embed_mlp_initialization: uniform
-    
+
     # - end allegro layers -
-    
+
     # Final MLP to go from Allegro latent space to edge energies:
     edge_eng_mlp_latent_dimensions: [32]
     edge_eng_mlp_nonlinearity: null
     edge_eng_mlp_initialization: uniform
-    
+
     # variables derived from dataset statistics
     per_type_energy_scale_shift_shifts: ${training_data_stats:per_atom_energy_mean}
-    per_type_energy_scale_shift_scales: ${training_data_stats:per_type_forces_rms} #null
-    global_rescale_scale: null #${training_data_stats:forces_rms}
+    per_type_energy_scale_shift_scales: ${training_data_stats:per_type_forces_rms}
     avg_num_neighbors: ${training_data_stats:num_neighbors_mean}
-  
+
 # global options
 global_options:
   seed: 789
