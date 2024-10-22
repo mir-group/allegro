@@ -15,9 +15,9 @@ def test_mlp(hs, act, init):
     data = torch.randn(bdim, hs[0])
 
     mlp = ScalarMLPFunction(
-        mlp_input_dimension=None,
-        mlp_latent_dimensions=hs,
-        mlp_output_dimension=None,
+        mlp_input_dim=None,
+        mlp_hidden_layer_dims=hs,
+        mlp_output_dim=None,
         mlp_nonlinearity=act,
         mlp_initialization=init,
     )
