@@ -5,11 +5,11 @@ import torch
 from torch import fx
 
 from e3nn import o3
-from e3nn.util.jit import compile
 from e3nn.o3._tensor_product._codegen import _sum_tensors
 
 from opt_einsum_fx import jitable, optimize_einsums_full
 
+from nequip.utils.compile import conditional_torchscript_jit
 from ._layout import StridedLayout
 from .._misc import _init_weight
 
@@ -242,7 +242,7 @@ def Linear(
 
     if mod is None:
         raise ValueError
-    return compile(mod)
+    return conditional_torchscript_jit(mod)
 
 
 def weights_per_instruction(
