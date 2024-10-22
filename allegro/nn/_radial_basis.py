@@ -8,7 +8,6 @@ from e3nn import o3
 
 from nequip.data import AtomicDataDict
 from nequip.nn import GraphModuleMixin
-from nequip.scripts.deploy import _set_deploy_metadata
 
 
 class AllegroBesselBasis(GraphModuleMixin, torch.nn.Module):
@@ -92,10 +91,6 @@ class AllegroBesselBasis(GraphModuleMixin, torch.nn.Module):
             assert torch.all(per_edge_type_cutoff > 0)
             assert torch.all(per_edge_type_cutoff <= r_max)
             self.register_buffer("per_edge_type_cutoff", per_edge_type_cutoff)
-            _set_deploy_metadata(
-                "per_edge_type_cutoff",
-                " ".join(str(e.item()) for e in per_edge_type_cutoff.view(-1)),
-            )
 
             bessel_weights = torch.linspace(
                 start=1.0, end=num_bessels_per_basis, steps=num_bessels_per_basis
