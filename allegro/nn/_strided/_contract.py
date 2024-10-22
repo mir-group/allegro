@@ -5,12 +5,12 @@ import torch
 from torch import fx
 
 from e3nn import o3
-from e3nn.util.jit import compile
 from e3nn.util import prod
 from e3nn.o3 import Instruction
 
 from opt_einsum_fx import jitable, optimize_einsums, EfficientShapeProp
 
+from nequip.utils.compile import conditional_torchscript_jit
 from ._layout import StridedLayout
 from .._misc import _init_weight
 
@@ -435,7 +435,7 @@ def Contracter(
     )
     if mod is None:
         raise ValueError("Couldn't use strided for given layout")
-    mod = compile(mod)
+    mod = conditional_torchscript_jit(mod)
     return mod
 
 
