@@ -3,9 +3,8 @@ import math
 
 import torch
 
-from nequip.utils import scatter
 from nequip.data import AtomicDataDict
-from nequip.nn import GraphModuleMixin
+from nequip.nn import GraphModuleMixin, scatter
 
 
 class EdgewiseReduce(GraphModuleMixin, torch.nn.Module):
