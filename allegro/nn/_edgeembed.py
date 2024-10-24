@@ -4,7 +4,7 @@ from e3nn import o3
 from e3nn.util.jit import compile_mode
 
 from nequip.data import AtomicDataDict
-from nequip.nn import GraphModuleMixin
+from nequip.nn import GraphModuleMixin, with_edge_vectors_
 
 from ._fc import ScalarMLPFunction
 
@@ -54,7 +54,7 @@ class ProductTypeEmbedding(GraphModuleMixin, torch.nn.Module):
         )
 
     def forward(self, data: AtomicDataDict.Type) -> AtomicDataDict.Type:
-        data = AtomicDataDict.with_edge_vectors(data, with_lengths=True)
+        data = with_edge_vectors_(data, with_lengths=True)
         # embed types
         atom_types = data[AtomicDataDict.ATOM_TYPE_KEY].squeeze(-1)
         edge_types = torch.index_select(
