@@ -1,7 +1,7 @@
 import torch
 
 from nequip.data import AtomicDataDict
-from nequip.nn import GraphModuleMixin
+from nequip.nn import GraphModuleMixin, with_edge_vectors_
 from nequip.nn.radial_basis import BesselBasis
 
 
@@ -63,7 +63,7 @@ class NormalizedBasis(GraphModuleMixin, torch.nn.Module):
         )
 
     def forward(self, data: AtomicDataDict.Type) -> AtomicDataDict.Type:
-        data = AtomicDataDict.with_edge_vectors(data, with_lengths=True)
+        data = with_edge_vectors_(data, with_lengths=True)
         basis = self.basis(data[AtomicDataDict.EDGE_LENGTH_KEY])
         if self.norm_basis_mean_shift:
             basis = basis - self._mean

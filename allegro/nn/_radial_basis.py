@@ -7,7 +7,7 @@ import torch
 from e3nn import o3
 
 from nequip.data import AtomicDataDict
-from nequip.nn import GraphModuleMixin
+from nequip.nn import GraphModuleMixin, with_edge_vectors_
 
 
 class AllegroBesselBasis(GraphModuleMixin, torch.nn.Module):
@@ -128,7 +128,7 @@ class AllegroBesselBasis(GraphModuleMixin, torch.nn.Module):
         model_dtype = data.get(
             AtomicDataDict.MODEL_DTYPE_KEY, data[AtomicDataDict.POSITIONS_KEY]
         ).dtype
-        data = AtomicDataDict.with_edge_vectors(data, with_lengths=True)
+        data = with_edge_vectors_(data, with_lengths=True)
         rmax_recip = self._rmax_recip
         bessel_weights = self.bessel_weights
         if self._per_edge_type:
