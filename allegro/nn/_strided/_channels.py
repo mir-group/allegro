@@ -48,7 +48,7 @@ class MakeWeightedChannels(torch.nn.Module):
                 edge_attr,
                 # [zu]r @ ri -> [zu]i -> zui
                 torch.mm(weights.reshape(-1, self._num_irreps), self._rtoi).view(
-                    len(edge_attr),
+                    edge_attr.size(0),
                     self.multiplicity_out,
                     -1,
                 ),
