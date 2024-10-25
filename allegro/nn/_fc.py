@@ -205,17 +205,9 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
                 zip(self.dims, self.dims[1:], weights, biases)
             ):
                 # computes beta*bias + alpha*(features @ w)
-                features = torch.addmm(
-                    bias,
-                    features,
-                    w,
-                    beta=1 if mlp_bias else 0,
-                    # include any nonlinearity normalization from previous layers
-                    # we want to compute nonlin_alpha * nonlin(Wx + b) at each layer
-                    # at the second+ layer, this can be written as
-                    # nonlin(W(nonlin_alpha * x) + b)
-                    alpha=(norm_from_last / math.sqrt(float(h_in))),
-                )
+                alpha = norm_from_last / math.sqrt(float(h_in))
+                w = alpha * w  # allow it to be precomputed at inference
+                features = features @ w
 
                 # generate nonlinearity code
                 if nonlinearity is not None and layer < num_layers - 1:
