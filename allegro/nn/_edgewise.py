@@ -47,7 +47,7 @@ class EdgewiseReduce(GraphModuleMixin, torch.nn.Module):
             data[self.field],
             edge_dst,
             dim=0,
-            dim_size=len(data[AtomicDataDict.POSITIONS_KEY]),
+            dim_size=AtomicDataDict.num_nodes(data),
             reduce=self.reduce,
         )
 
@@ -98,7 +98,7 @@ class EdgewiseEnergySum(GraphModuleMixin, torch.nn.Module):
             edge_eng,
             edge_center,
             dim=0,
-            dim_size=len(data[AtomicDataDict.POSITIONS_KEY]),
+            dim_size=AtomicDataDict.num_nodes(data),
         )
 
         data[AtomicDataDict.PER_ATOM_ENERGY_KEY] = atom_eng

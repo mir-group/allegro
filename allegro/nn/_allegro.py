@@ -390,7 +390,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         :return: AtomicDataDict.Type
         """
         edge_center = data[AtomicDataDict.EDGE_INDEX_KEY][0]
-        num_atoms: int = len(data[AtomicDataDict.POSITIONS_KEY])
+        num_atoms: int = AtomicDataDict.num_nodes(data)
 
         edge_attr = data[self.field]
         edge_invariants = data[self.edge_invariant_field]
