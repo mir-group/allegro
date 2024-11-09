@@ -4,7 +4,6 @@ import torch
 
 from e3nn import o3
 from e3nn.util.test import assert_equivariant
-
 from allegro.nn._strided import Contracter
 
 
@@ -22,7 +21,6 @@ from allegro.nn._strided import Contracter
         ("p", 3, 3, 3),
     ],
 )
-@pytest.mark.parametrize("shared_weights", [False, True])
 def test_contract(
     irreps_in1,
     irreps_in2,
@@ -31,7 +29,6 @@ def test_contract(
     mul1,
     mul2,
     mulout,
-    shared_weights,
 ):
     irreps_in1 = o3.Irreps(irreps_in1)
     irreps_in2 = o3.Irreps(irreps_in2)
@@ -47,25 +44,19 @@ def test_contract(
         irreps_in1=o3.Irreps((mul1, ir) for _, ir in irreps_in1),
         irreps_in2=o3.Irreps((mul2, ir) for _, ir in irreps_in2),
         irreps_out=o3.Irreps((mulout, ir) for _, ir in irreps_out),
-        has_weight=True,
         instructions=instr,
         connection_mode=mode,
-        shared_weights=shared_weights,
-        internal_weights=shared_weights,
     )
     c_opt_mod = Contracter(
         irreps_in1=o3.Irreps((mul1, ir) for _, ir in irreps_in1),
         irreps_in2=o3.Irreps((mul2, ir) for _, ir in irreps_in2),
         irreps_out=o3.Irreps((mulout, ir) for _, ir in irreps_out),
-        has_weight=True,
         instructions=instr,
         connection_mode=mode,
-        shared_weights=shared_weights,
-        internal_weights=shared_weights,
     )
-    if shared_weights:
-        with torch.no_grad():
-            c_opt_mod.w.copy_(c_base.w)
+    with torch.no_grad():
+        c_opt_mod.weights.copy_(c_base.weights)
+    c_opt_mod = torch.jit.script(c_opt_mod)
 
     def c_opt(x, y, w=None):
         args = (x, y, w)
@@ -77,16 +68,15 @@ def test_contract(
     args_in = (
         irreps_in1.randn(batchdim, mul1, -1),
         irreps_in2.randn(batchdim, mul2, -1),
-        torch.randn(tuple(batchdim if e == -1 else e for e in c_base.weight_shape)),
+        torch.randn(tuple(batchdim if e == -1 else e for e in c_base.weights.shape)),
     )
-    if shared_weights:
-        args_in = args_in[:-1]
+    args_in = args_in[:-1]
 
     for c in (c_base, c_opt):
         assert_equivariant(
             c,
             args_in=args_in,
-            irreps_in=[irreps_in1, irreps_in2] + ([] if shared_weights else [None]),
+            irreps_in=[irreps_in1, irreps_in2],
             irreps_out=irreps_out,
         )
 
@@ -94,12 +84,8 @@ def test_contract(
     if torch.get_default_dtype() == torch.float64:
         # check one input and a weight
         args_in[0].requires_grad_(True)
-        if not shared_weights:
-            args_in[2].requires_grad_(True)
         torch.autograd.gradcheck(c_opt, args_in, fast_mode=True)
         args_in[0].requires_grad_(False)
-        if not shared_weights:
-            args_in[2].requires_grad_(False)
 
     # Check same
     out_orig = c_base(*args_in)
@@ -135,7 +121,6 @@ def _strided_to_cat(irreps, mul, x):
         ("uvv", 1, 8, 8),
     ],
 )
-@pytest.mark.parametrize("shared_weights", [False, True])
 def test_like_tp(
     irreps_in1,
     irreps_in2,
@@ -144,7 +129,6 @@ def test_like_tp(
     mul1,
     mul2,
     mulout,
-    shared_weights,
 ):
     irreps_in1 = o3.Irreps(irreps_in1)
     irreps_in2 = o3.Irreps(irreps_in2)
@@ -162,21 +146,14 @@ def test_like_tp(
         irreps_in1=o3.Irreps((mul1, ir) for _, ir in irreps_in1),
         irreps_in2=o3.Irreps((mul2, ir) for _, ir in irreps_in2),
         irreps_out=o3.Irreps((mulout, ir) for _, ir in irreps_out),
-        has_weight=True,
         instructions=instr,
         connection_mode=mode,
-        shared_weights=shared_weights,
-        internal_weights=shared_weights,
     )
     batchdim = 7
     args_in = (
-        torch.randn(batchdim, mul1, c._dim_in1),
-        torch.randn(batchdim, mul2, c._dim_in2),
-        (
-            c.w
-            if shared_weights
-            else torch.randn(tuple(batchdim if e == -1 else e for e in c.weight_shape))
-        ),
+        torch.randn(batchdim, mul1, c.base_dim1),
+        torch.randn(batchdim, mul2, c.base_dim2),
+        c.weights,
     )
 
     # TP
@@ -185,7 +162,7 @@ def test_like_tp(
         irreps_in2=o3.Irreps((mul2, ir) for _, ir in irreps_in2),
         irreps_out=o3.Irreps((mulout, ir) for _, ir in irreps_out),
         instructions=[ins + (mode, True, 1.0) for ins in instr],
-        shared_weights=shared_weights,
+        shared_weights=True,
         internal_weights=False,
     )
     assert tp.weight_numel == c.weight_numel
@@ -196,19 +173,13 @@ def test_like_tp(
     if len(instr) > 1:
         weights_tp = (
             weights_tp.detach()
-            .reshape(c.weight_shape)  # zuvwp
-            .permute(
-                ((-1,) + tuple(range(0, len(c.weight_shape) - 1)))
-                if shared_weights
-                else ((0, -1) + tuple(range(1, len(c.weight_shape) - 1)))
-            )
+            .reshape(c.weights.shape)  # zuvwp
+            .permute(((-1,) + tuple(range(0, len(c.weights.shape) - 1))))
             .contiguous()
         )
-    if shared_weights:
-        weights_tp = weights_tp.reshape(-1)
-        args_in = args_in[:-1]
-    else:
-        weights_tp = weights_tp.reshape(batchdim, -1)
+    weights_tp = weights_tp.reshape(-1)
+    args_in = args_in[:-1]
+
     args_tp = (
         _strided_to_cat(irreps_in1, mul1, args_in[0]),
         _strided_to_cat(irreps_in2, mul2, args_in[1]),

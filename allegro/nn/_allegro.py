@@ -218,9 +218,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 ),
                 instructions=instr,
                 connection_mode=tp_tensors_mixing_mode,
-                shared_weights=internal_weight_tp,
-                has_weight=internal_weight_tp,
-                internal_weights=internal_weight_tp,
                 initialization=tensor_track_weight_init,
             )
             self.tps.append(tp)
