@@ -90,7 +90,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         internal_weight_tp = tensors_mixing_mode != "uuulin"
 
         assert not any(
-            k["mlp_bias"]
+            k.get("mlp_bias", False)
             for k in (two_body_latent_kwargs, latent_kwargs, env_embed_kwargs)
         )
 
