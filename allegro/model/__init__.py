@@ -1,3 +1,3 @@
-from ._allegro import Allegro
+from .allegro_models import AllegroModel
 
-__all__ = [Allegro]
+__all__ = [AllegroModel]
