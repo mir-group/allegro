@@ -73,58 +73,74 @@ training_module:
     _target_: torch.optim.Adam
 
   model:
-    # -- network --
-    model_builders:
-     - allegro.model.Allegro
-     # the typical model builders from `nequip` can still be used:
-     - nequip.model.PerTypeEnergyScaleShift
-     - nequip.model.StressForceOutput
+    _target_: allegro.model.AllegroModel
 
-    # bookkeeping
-    seed: 123
-    type_names: ${model_type_names}
+    # === basic model params ===
+    seed: 456
     model_dtype: float32
-
-    # cutoffs
+    type_names: ${model_type_names}
     r_max: ${cutoff_radius}
 
-    # radial basis
-    BesselBasis_trainable: true
-    PolynomialCutoff_p: 6   
-    num_bessels_per_basis: 8
+    # == bessel encoding ==
+    num_bessels: 8                # number of basis functions used in the radial Bessel basis, the default of 8 usually works well
+    bessel_trainable: false       # set true to train the bessel weights (default false)
+    polynomial_cutoff_p: 6        # p-exponent used in polynomial cutoff function, smaller p corresponds to stronger decay with distance
 
-    # symmetry
+    # optionally, apply additional MLP to bessel encoding
+    #radial_basis_mlp_kwargs:
+    #  mlp_latent_dimensions: [32]
+    #  mlp_nonlinearity: silu
+    #  mlp_initialization: uniform
+
+    # === symmetry ===
+    # maximum order l to use in spherical harmonics embedding, 1 is baseline (fast), 2 is more accurate, but slower, 3 highly accurate but slow
     l_max: 1
-    parity: o3_full   
+    # whether to include parity symmetry equivariance
+    # allowed: o3_full, o3_restricted, so3
+    parity_setting: o3_full   
 
-    # Allegro layers:
-    num_layers: 1
-    num_tensor_features: 8
+    # === allegro layers ===
+    # number of tensor product layers, 1-3 usually best, more is more accurate but slower
+    num_layers: 2
+    
+    # number of tensor features, more is more accurate but slower, 1, 4, 8, 16, 64, 128 are good options to try depending on data set
+    num_tensor_features: 32
 
-    two_body_latent_mlp_latent_dimensions: [32, 64, 128]
-    two_body_latent_mlp_nonlinearity: silu
-    two_body_latent_mlp_initialization: uniform
+    two_body_latent_kwargs:
+      mlp_latent_dimensions: [64, 128]
+      mlp_nonlinearity: silu
+      mlp_initialization: uniform
 
-    latent_mlp_latent_dimensions: [128, 128]
-    latent_mlp_nonlinearity: silu
-    latent_mlp_initialization: uniform
-    latent_resnet: true
+    latent_kwargs:
+      mlp_latent_dimensions: [128, 128]
+      mlp_nonlinearity: silu
+      mlp_initialization: uniform
+ 
+    env_embed_kwargs:
+      mlp_latent_dimensions: []
+      mlp_nonlinearity: null
+      mlp_initialization: uniform
 
-    env_embed_mlp_latent_dimensions: []
-    env_embed_mlp_nonlinearity: null
-    env_embed_mlp_initialization: uniform
+    # === edge MLP ===
+    edge_eng_kwargs:
+      mlp_latent_dimensions: [32]
+      mlp_nonlinearity: null
+      mlp_initialization: uniform
 
-    # - end allegro layers -
-
-    # Final MLP to go from Allegro latent space to edge energies:
-    edge_eng_mlp_latent_dimensions: [32]
-    edge_eng_mlp_nonlinearity: null
-    edge_eng_mlp_initialization: uniform
-
-    # variables derived from dataset statistics
-    per_type_energy_scale_shift_shifts: ${training_data_stats:per_atom_energy_mean}
-    per_type_energy_scale_shift_scales: ${training_data_stats:per_type_forces_rms}
+    # average number of neighbors for edge sum normalization
     avg_num_neighbors: ${training_data_stats:num_neighbors_mean}
+    
+    # == per-type per-atom scales and shifts ==
+    per_type_energy_shifts: ${training_data_stats:per_atom_energy_mean}
+    per_type_energy_scales: ${training_data_stats:per_type_forces_rms}
+    per_type_energy_scales_trainable: false
+    per_type_energy_shifts_trainable: false
+
+    # == ZBL pair potential ==
+    pair_potential:
+      _target_: nequip.nn.pair_potential.ZBL
+      units: real     # Ang and kcal/mol, LAMMPS unit names;  allowed values "metal" and "real"
+      chemical_species: ${chemical_symbols}   # must tell ZBL the chemical species of the various model atom types
 
 # global options
 global_options:
