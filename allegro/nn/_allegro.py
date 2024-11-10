@@ -37,7 +37,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         # required hyperparameters:
         num_layers: int,
         type_names: List[str],
-        r_max: float,
         num_tensor_features: int,
         tensor_track_allowed_irreps: o3.Irreps,
         avg_num_neighbors: Optional[float] = None,
@@ -90,7 +89,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         }[tensors_mixing_mode]
         internal_weight_tp = tensors_mixing_mode != "uuulin"
 
-        self.register_buffer("r_max", torch.as_tensor(float(r_max)))
         assert not any(
             k["mlp_bias"]
             for k in (two_body_latent_kwargs, latent_kwargs, env_embed_kwargs)
