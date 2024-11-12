@@ -37,6 +37,9 @@ class MakeWeightedChannels(torch.nn.Module):
             rtoi[i, this_slice] = alpha
         self.register_buffer("_rtoi", rtoi, persistent=False)
 
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(\n  num_irreps: {self._num_irreps}\n  multiplicity_out: {self.multiplicity_out}\n  weight_numel: {self.weight_numel}\n)"
+
     def forward(self, edge_attr, weights):
         if self.weight_individual_irreps:
             # weights are [z, u, r]
@@ -50,7 +53,7 @@ class MakeWeightedChannels(torch.nn.Module):
                 torch.mm(weights.reshape(-1, self._num_irreps), self._rtoi).view(
                     edge_attr.size(0),
                     self.multiplicity_out,
-                    -1,
+                    self._rtoi.shape[1],
                 ),
             )
         else:
