@@ -172,9 +172,11 @@ def test_like_tp(
     args_in = (
         torch.randn(batchdim, mul1, c._dim_in1),
         torch.randn(batchdim, mul2, c._dim_in2),
-        c.w
-        if shared_weights
-        else torch.randn(tuple(batchdim if e == -1 else e for e in c.weight_shape)),
+        (
+            c.w
+            if shared_weights
+            else torch.randn(tuple(batchdim if e == -1 else e for e in c.weight_shape))
+        ),
     )
 
     # TP
