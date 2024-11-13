@@ -86,11 +86,10 @@ training_module:
     bessel_trainable: false       # set true to train the bessel weights (default false)
     polynomial_cutoff_p: 6        # p-exponent used in polynomial cutoff function, smaller p corresponds to stronger decay with distance
 
-    # optionally, apply additional MLP to bessel encoding
-    #radial_basis_mlp_kwargs:
-    #  mlp_latent_dimensions: [32]
-    #  mlp_nonlinearity: silu
-    #  mlp_initialization: uniform
+    # == two-body scalar embedding ===
+    two_body_embedding_dim: 32
+    two_body_mlp_hidden_layer_depth: 2
+    two_body_mlp_hidden_layer_width: 64
 
     # === symmetry ===
     # maximum order l to use in spherical harmonics embedding, 1 is baseline (fast), 2 is more accurate, but slower, 3 highly accurate but slow
@@ -103,29 +102,17 @@ training_module:
     # number of tensor product layers, 1-3 usually best, more is more accurate but slower
     num_layers: 2
     
+    num_scalar_features: 64
+    
     # number of tensor features, more is more accurate but slower, 1, 4, 8, 16, 64, 128 are good options to try depending on data set
     num_tensor_features: 32
 
-    two_body_latent_kwargs:
-      mlp_latent_dimensions: [64, 128]
-      mlp_nonlinearity: silu
-      mlp_initialization: uniform
+    allegro_mlp_hidden_layer_depth: 2
+    allegro_mlp_hidden_layer_width: 128
 
-    latent_kwargs:
-      mlp_latent_dimensions: [128, 128]
-      mlp_nonlinearity: silu
-      mlp_initialization: uniform
- 
-    env_embed_kwargs:
-      mlp_latent_dimensions: []
-      mlp_nonlinearity: null
-      mlp_initialization: uniform
-
-    # === edge MLP ===
-    edge_eng_kwargs:
-      mlp_latent_dimensions: [32]
-      mlp_nonlinearity: null
-      mlp_initialization: uniform
+    # === readout ===
+    readout_mlp_hidden_layer_depth: 1
+    readout_mlp_hidden_layer_width: 32
 
     # average number of neighbors for edge sum normalization
     avg_num_neighbors: ${training_data_stats:num_neighbors_mean}
