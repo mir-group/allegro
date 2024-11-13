@@ -12,19 +12,15 @@ BASIC_INFO = {
 COMMON_CONFIG = {
     "num_bessels": 4,
     "avg_num_neighbors": 5.0,  # very approximate to keep numerics sane
+    "num_scalar_features": 32,
     "num_tensor_features": 4,
-    "two_body_latent_kwargs": {
-        "mlp_latent_dimensions": [32],
-    },
-    "latent_kwargs": {
-        "mlp_latent_dimensions": [32, 32],
-    },
-    "env_embed_kwargs": {
-        "mlp_latent_dimensions": [],
-    },
-    "edge_eng_kwargs": {
-        "mlp_latent_dimensions": [8],
-    },
+    "two_body_embedding_dim": 8,
+    "two_body_mlp_hidden_layer_depth": 1,
+    "two_body_mlp_hidden_layer_width": 32,
+    "allegro_mlp_hidden_layer_depth": 2,
+    "allegro_mlp_hidden_layer_width": 32,
+    "readout_mlp_hidden_layer_depth": 1,
+    "readout_mlp_hidden_layer_width": 8,
     **BASIC_INFO,
 }
 # TODO: test so3 mode when can pass down option to assert equivariance to ignore parity
@@ -44,21 +40,19 @@ minimal_config2 = dict(
 minimal_config3 = dict(
     l_max=2,
     parity_setting="o3_restricted",
-    num_layers=4,
+    num_layers=2,
     **COMMON_CONFIG,
 )
 minimal_config4 = dict(
     l_max=3,
     parity_setting="o3_full",
     num_layers=3,
-    latent_resnet=False,
     **COMMON_CONFIG,
 )
 minimal_config5 = dict(
     l_max=3,
     parity_setting="o3_full",
     num_layers=3,
-    latent_resnet=True,
     tensors_mixing_mode="uvvp",
     **COMMON_CONFIG,
 )
