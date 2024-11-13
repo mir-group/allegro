@@ -13,15 +13,14 @@ from nequip.nn.embedding import (
     PolynomialCutoff,
     EdgeLengthNormalizer,
     BesselEdgeLengthEncoding,
-    SphericalHarmonicEdgeAttrs,
 )
 from allegro.nn import (
+    TwoBodySphericalHarmonicTensorEmbdedding,
     ProductTypeEmbedding,
     EdgewiseEnergySum,
     Allegro_Module,
     ScalarMLP,
 )
-from omegaconf import OmegaConf
 from hydra.utils import instantiate
 from typing import Sequence, Union, Optional, Dict
 
@@ -72,14 +71,18 @@ def FullAllegroEnergyModel(
     irreps_edge_sh: Union[int, str, o3.Irreps],
     tensor_track_allowed_irreps: Union[str, o3.Irreps],
     # two body embedding
-    two_body_latent_kwargs: Dict,
+    two_body_embedding_dim: int,
+    two_body_mlp_hidden_layer_depth: int,
+    two_body_mlp_hidden_layer_width: int,
     # allegro layers
     num_layers: int,
+    num_scalar_features: int,
     num_tensor_features: int,
-    latent_kwargs: Dict,
-    env_embed_kwargs: Dict,
+    allegro_mlp_hidden_layer_depth: int,
+    allegro_mlp_hidden_layer_width: int,
     # readout
-    edge_eng_kwargs: Dict,
+    readout_mlp_hidden_layer_depth: int,
+    readout_mlp_hidden_layer_width: int,
     # edge length encoding
     per_edge_type_cutoff: Optional[Dict[str, Union[float, Dict[str, float]]]] = None,
     num_bessels: int = 8,
@@ -114,63 +117,71 @@ def FullAllegroEnergyModel(
     )
     typeembed = ProductTypeEmbedding(
         type_names=type_names,
-        # sane default to the MLP that comes next
-        initial_scalar_embedding_dim=two_body_latent_kwargs["mlp_latent_dimensions"][0],
-        radial_basis_mlp_kwargs=radial_basis_mlp_kwargs,
+        initial_embedding_dim=two_body_embedding_dim,
+        radial_features_in_field=AtomicDataDict.EDGE_EMBEDDING_KEY,
+        edge_embed_out_field=AtomicDataDict.EDGE_EMBEDDING_KEY,
         irreps_in=bessel_encode.irreps_out,
     )
 
-    # === two-body tensor encoding ===
-    spharm = SphericalHarmonicEdgeAttrs(
-        irreps_edge_sh=irreps_edge_sh,
-        out_field=AtomicDataDict.EDGE_ATTRS_KEY,
+    twobody_mlp = ScalarMLP(
+        # input dims from previous module
+        field=AtomicDataDict.EDGE_EMBEDDING_KEY,
+        # output dims consistent with Allegro scalar dims
+        mlp_output_dim=num_scalar_features,
+        mlp_hidden_layer_depth=two_body_mlp_hidden_layer_depth,
+        mlp_hidden_layer_width=two_body_mlp_hidden_layer_width,
         irreps_in=typeembed.irreps_out,
+    )
+
+    # === two-body tensor encoding ===
+    tensor_embed = TwoBodySphericalHarmonicTensorEmbdedding(
+        irreps_edge_sh=irreps_edge_sh,
+        num_tensor_features=num_tensor_features,
+        scalar_embedding_in_field=AtomicDataDict.EDGE_EMBEDDING_KEY,
+        tensor_basis_out_field=AtomicDataDict.EDGE_ATTRS_KEY,
+        tensor_embedding_out_field=AtomicDataDict.EDGE_FEATURES_KEY,
+        irreps_in=twobody_mlp.irreps_out,
     )
 
     # === allegro module ===
     allegro = Allegro_Module(
         num_layers=num_layers,
-        type_names=type_names,
+        num_scalar_features=num_scalar_features,
         num_tensor_features=num_tensor_features,
         tensor_track_allowed_irreps=tensor_track_allowed_irreps,
         avg_num_neighbors=avg_num_neighbors,
-        # TODO:
+        # MLP
+        latent_kwargs={
+            "mlp_hidden_layer_depth": allegro_mlp_hidden_layer_depth,
+            "mlp_hidden_layer_width": allegro_mlp_hidden_layer_width,
+        },
+        # best to use defaults for these
         tensors_mixing_mode=tensors_mixing_mode,
         tensor_track_weight_init=tensor_track_weight_init,
         weight_individual_irreps=weight_individual_irreps,
-        # MLP parameters:
-        two_body_latent_kwargs=two_body_latent_kwargs,
-        env_embed_kwargs=env_embed_kwargs,
-        latent_kwargs=latent_kwargs,
-        # resnet
-        latent_resnet=latent_resnet,
-        latent_resnet_coefficients=None,
-        latent_resnet_coefficients_learnable=False,
         # fields
-        field=AtomicDataDict.EDGE_ATTRS_KEY,
-        edge_invariant_field=AtomicDataDict.EDGE_EMBEDDING_KEY,
-        latent_out_field=AtomicDataDict.EDGE_FEATURES_KEY,
-        irreps_in=spharm.irreps_out,
+        tensor_basis_in_field=AtomicDataDict.EDGE_ATTRS_KEY,
+        tensor_features_in_field=AtomicDataDict.EDGE_FEATURES_KEY,
+        scalar_in_field=AtomicDataDict.EDGE_EMBEDDING_KEY,
+        scalar_out_field=AtomicDataDict.EDGE_FEATURES_KEY,
+        irreps_in=tensor_embed.irreps_out,
     )
 
-    # === edge energy MLP ===
-    if not isinstance(edge_eng_kwargs, dict):
-        edge_eng_kwargs = OmegaConf.to_container(edge_eng_kwargs, resolve=True)
-    edge_eng_kwargs = edge_eng_kwargs.copy()
-    edge_eng_kwargs.update(
-        {
-            "irreps_in": allegro.irreps_out,
-            "field": AtomicDataDict.EDGE_FEATURES_KEY,
-            "out_field": AtomicDataDict.EDGE_ENERGY_KEY,
-            "mlp_output_dimension": 1,
-        }
+    # === allegro readout ===
+    readout = ScalarMLP(
+        mlp_output_dim=1,
+        mlp_hidden_layer_depth=readout_mlp_hidden_layer_depth,
+        mlp_hidden_layer_width=readout_mlp_hidden_layer_width,
+        mlp_nonlinearity="silu" if readout_mlp_nonlinear else None,
+        field=AtomicDataDict.EDGE_FEATURES_KEY,
+        out_field=AtomicDataDict.EDGE_ENERGY_KEY,
+        irreps_in=allegro.irreps_out,
     )
-    edge_eng = ScalarMLP(**edge_eng_kwargs)
 
     # === edge -> atom ===
     edge_eng_sum = EdgewiseEnergySum(
         avg_num_neighbors=avg_num_neighbors,
-        irreps_in=edge_eng.irreps_out,
+        irreps_in=readout.irreps_out,
     )
 
     # === per type scale shift ===
@@ -189,9 +200,10 @@ def FullAllegroEnergyModel(
         "edge_norm": edge_norm,
         "bessel_encode": bessel_encode,
         "typeembed": typeembed,
-        "spharm": spharm,
+        "twobody_mlp": twobody_mlp,
+        "tensor_embed": tensor_embed,
         "allegro": allegro,
-        "edge_eng": edge_eng,
+        "readout": readout,
         "edge_eng_sum": edge_eng_sum,
         "per_type_energy_scale_shift": per_type_energy_scale_shift,
     }
