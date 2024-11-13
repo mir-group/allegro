@@ -6,7 +6,7 @@ from nequip.nn import (
     SequentialGraphNetwork,
     AtomwiseReduce,
     PerTypeScaleShift,
-    StressOutput,
+    ForceStressOutput,
 )
 
 from nequip.nn.embedding import (
@@ -61,7 +61,7 @@ def AllegroModel(**kwargs):
         l_max (int): maximum order l to use in spherical harmonics embedding, 1 is baseline (fast), 2 is more accurate, but slower, 3 highly accurate but slow
         parity_setting (str): whether to include parity symmetry equivariance; options are ``o3_full``, ``o3_restricted``, ``so3``
     """
-    return StressOutput(AllegroEnergyModel(**kwargs))
+    return ForceStressOutput(AllegroEnergyModel(**kwargs))
 
 
 @model_builder
@@ -218,4 +218,4 @@ def FullAllegroEnergyModel(
 
 @model_builder
 def FullAllegroModel(**kwargs):
-    return StressOutput(FullAllegroEnergyModel(**kwargs))
+    return ForceStressOutput(FullAllegroEnergyModel(**kwargs))
