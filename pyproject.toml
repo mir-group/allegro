@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mir-allegro"
+dynamic = ["version"]
+description = "Allegro is an open-source code for building highly scalable and accurate equivariant deep learning interatomic potentials."
+readme = "README.md"
+requires-python = ">=3.9"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Albert Musealian"},
+    {name = "Simon Batzner"},
+]
+dependencies = [
+    "nequip>=0.6.1",
+]
+
+[project.urls]
+Repository = "https://github.com/mir-group/allegro"
+
+[tool.setuptools]
+packages = {find = {include = ["allegro", "allegro.*"]}}
+
+[tool.setuptools.dynamic]
+version = {attr = "allegro._version.__version__"}
+
+[tool.flake8]
+max-line-length = 127
+select = ["E", "F", "W", "C"]
+ignore = ["E226", "E501", "E741", "E743", "C901", "W503", "E203"]
+exclude = [
+    ".eggs",
+    "*.egg",
+    "build",
+    "dist",
+    "docs",
+    ".git",
+    "__pycache__",
+    "examples",
+    "tmp"
+]
+
+[project.entry-points."nequip.extension"]
+init_always = "allegro"
