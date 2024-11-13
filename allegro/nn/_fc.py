@@ -15,20 +15,8 @@ from nequip.data import AtomicDataDict
 from nequip.nn import GraphModuleMixin
 from nequip.nn.nonlinearities import ShiftedSoftPlus
 
+from allegro.utils import to_int_list
 from ._misc import _init_weight
-
-
-def _to_int_list(arg):
-    # converts str: "64 64 64" to List[int]: [64, 64, 64]
-    # or int: 64 to List[int]: [64]
-    # to simplify parsing of list inputs when using 3rd party code
-    # e.g. to pass inputs to wandb sweep configs
-    if isinstance(arg, str):
-        return [int(x) for x in arg.split()]
-    elif isinstance(arg, int):
-        return [arg]
-    else:
-        return arg
 
 
 @compile_mode("script")
@@ -40,8 +28,10 @@ class ScalarMLP(GraphModuleMixin, torch.nn.Module):
 
     def __init__(
         self,
-        mlp_latent_dimensions: Union[List[int], str],
-        mlp_output_dimension: Optional[int],
+        mlp_output_dim: Optional[int],
+        mlp_hidden_layer_dims: Optional[Union[List[int], str]] = None,
+        mlp_hidden_layer_depth: Optional[int] = None,
+        mlp_hidden_layer_width: Optional[int] = None,
         mlp_nonlinearity: Optional[str] = "silu",
         mlp_initialization: str = "uniform",
         mlp_bias: bool = False,
@@ -58,15 +48,14 @@ class ScalarMLP(GraphModuleMixin, torch.nn.Module):
             required_irreps_in=[self.field],
         )
 
-        mlp_latent_dimensions = _to_int_list(mlp_latent_dimensions)
-
         assert len(self.irreps_in[self.field]) == 1
         assert self.irreps_in[self.field][0].ir == (0, 1)  # scalars
-        in_dim = self.irreps_in[self.field][0].mul
         self._module = ScalarMLPFunction(
-            mlp_input_dimension=in_dim,
-            mlp_latent_dimensions=mlp_latent_dimensions,
-            mlp_output_dimension=mlp_output_dimension,
+            mlp_input_dim=self.irreps_in[self.field][0].mul,
+            mlp_hidden_layer_dims=mlp_hidden_layer_dims,
+            mlp_hidden_layer_depth=mlp_hidden_layer_depth,
+            mlp_hidden_layer_width=mlp_hidden_layer_width,
+            mlp_output_dim=mlp_output_dim,
             mlp_nonlinearity=mlp_nonlinearity,
             mlp_initialization=mlp_initialization,
             mlp_bias=mlp_bias,
@@ -92,18 +81,25 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
 
     def __init__(
         self,
-        mlp_input_dimension: Optional[int],
-        mlp_latent_dimensions: Union[List[int], str],
-        mlp_output_dimension: Optional[int],
+        mlp_input_dim: Optional[int],
+        mlp_output_dim: Optional[int],
+        mlp_hidden_layer_dims: Optional[Union[List[int], str]] = None,
+        mlp_hidden_layer_depth: Optional[int] = None,
+        mlp_hidden_layer_width: Optional[int] = None,
+        mlp_extra_output_dim: int = 0,
         mlp_nonlinearity: Optional[str] = "silu",
         mlp_initialization: str = "uniform",
         mlp_bias: bool = False,
         mlp_bfloat16: bool = False,
     ):
         super().__init__()
-        assert not mlp_bias  # guard against accidents
+
+        assert not mlp_bias, "MLPs used in Allegro should not have a bias"
+
+        # === handle nonlinearity ===
         nonlinearity = {
             None: None,
+            # flexible parsing
             "null": None,
             "None": None,
             "silu": torch.nn.functional.silu,
@@ -113,23 +109,36 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
             nonlin_const = normalize2mom(nonlinearity).cst
         else:
             nonlin_const = 1.0
-
-        mlp_latent_dimensions = _to_int_list(mlp_latent_dimensions)
-
-        dimensions = (
-            ([mlp_input_dimension] if mlp_input_dimension is not None else [])
-            + mlp_latent_dimensions
-            + ([mlp_output_dimension] if mlp_output_dimension is not None else [])
-        )
-        assert len(dimensions) >= 2  # Must have input and output dim
-        num_layers = len(dimensions) - 1
-        self.num_layers = num_layers
-
-        self.in_features = dimensions[0]
-        self.out_features = dimensions[-1]
         self.is_nonlinear = False  # updated in codegen below
 
-        # Code
+        # === handle MLP dimensions ===
+        err_msg = "either `mlp_hidden_layer_dims` OR `mlp_hidden_layer_depth` and `mlp_hidden_layer_width` must be provided, but not both."
+        if mlp_hidden_layer_dims is None:
+            assert (
+                mlp_hidden_layer_depth is not None
+                and mlp_hidden_layer_width is not None
+            ), err_msg
+            mlp_hidden_layer_dims = mlp_hidden_layer_depth * [mlp_hidden_layer_width]
+        else:
+            assert (
+                mlp_hidden_layer_depth is None and mlp_hidden_layer_width is None
+            ), err_msg
+            mlp_hidden_layer_dims = to_int_list(mlp_hidden_layer_dims)
+        self.dims = (
+            ([mlp_input_dim] if mlp_input_dim is not None else [])
+            + mlp_hidden_layer_dims
+            + ([mlp_output_dim] if mlp_output_dim is not None else [])
+        )
+        self.dims[-1] += mlp_extra_output_dim
+        assert (
+            len(self.dims) >= 2
+        ), f"`ScalarMLPFunction must have >= 2 dimensions (input and output), but found {self.dims}"
+        num_layers = len(self.dims) - 1
+        self.num_layers = num_layers
+        self.in_features = self.dims[0]
+        self.out_features = self.dims[-1]
+
+        # === code ===
         params = {}
         graph = fx.Graph()
         tracer = fx.proxy.GraphAppendingTracer(graph)
@@ -140,7 +149,7 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
         base = torch.nn.Module()
 
         # make weights
-        for layer, (h_in, h_out) in enumerate(zip(dimensions, dimensions[1:])):
+        for layer, (h_in, h_out) in enumerate(zip(self.dims, self.dims[1:])):
             w = torch.empty(h_in, h_out)
             _init_weight(w, mlp_initialization, allow_orthogonal=True)
             if mlp_bfloat16:
@@ -156,12 +165,12 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
         features = Proxy(graph.placeholder("x"))
         weights = [
             Proxy(graph.get_attr(f"_weight_{layer}"))
-            for layer in range(len(dimensions) - 1)
+            for layer in range(len(self.dims) - 1)
         ]
         if mlp_bias:
             biases = [
                 Proxy(graph.get_attr(f"_bias_{layer}"))
-                for layer in range(len(dimensions) - 1)
+                for layer in range(len(self.dims) - 1)
             ]
         else:
             base.register_buffer(
@@ -171,7 +180,7 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
                     dtype=torch.bfloat16 if mlp_bfloat16 else torch.get_default_dtype(),
                 ),
             )
-            biases = [Proxy(graph.get_attr("_bias_dummy"))] * (len(dimensions) - 1)
+            biases = [Proxy(graph.get_attr("_bias_dummy"))] * (len(self.dims) - 1)
 
         if (len(weights) > 1) and (not mlp_bias) and (nonlinearity is None):
             # we can special case since the whole thing is linear
@@ -179,7 +188,7 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
             #  1) addmm can fuse the scalar multiply
             #  2) multi_dot doesn't support the identity case
             norm_constant = 1.0 / functools.reduce(
-                operator.mul, [math.sqrt(float(d)) for d in dimensions[:-1]]
+                operator.mul, [math.sqrt(float(d)) for d in self.dims[:-1]]
             )
             # matmul is linear
             weights[0] = weights[0] * norm_constant
@@ -193,7 +202,7 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
             # generate normal full MLP code
             norm_from_last: float = 1.0
             for layer, (h_in, h_out, w, bias) in enumerate(
-                zip(dimensions, dimensions[1:], weights, biases)
+                zip(self.dims, self.dims[1:], weights, biases)
             ):
                 # computes beta*bias + alpha*(features @ w)
                 features = torch.addmm(
@@ -222,6 +231,9 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
 
         self._codegen_register({"_forward": fx.GraphModule(base, graph)})
         self.use_bfloat16 = mlp_bfloat16
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(\n  dims: {self.dims}\n  nonlinear: {self.is_nonlinear}\n)"
 
     def forward(self, x):
         if self.use_bfloat16:
