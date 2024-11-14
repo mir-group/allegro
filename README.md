@@ -2,6 +2,8 @@
 
 This package implements the Allegro E(3)-equivariant machine-learning interatomic potential (https://arxiv.org/abs/2204.05249).
 
+**:red_circle: PLEASE NOTE :red_circle:**:  Please note that a major update to this code is in the final stages of development and as a result support for the current release is a lower priority.
+
 ![Allegro logo](./logo.png)
 
 In particular, `allegro` implements the Allegro model as an **extension package** to the [NequIP package](https://github.com/mir-group/nequip).
@@ -60,7 +62,7 @@ The implementation of Allegro is built on NequIP [1], our framework for E(3)-equ
 
 ## Contact, questions, and contributing
 
-If you have questions, please don't hesitate to reach out to batzner[at]g[dot]harvard[dot]edu and albym[at]seas[dot]harvard[dot]edu.
+We can be reached by email at allegro-nequip@g.harvard.edu.
 
 If you find a bug or have a proposal for a feature, please post it in the [Issues](https://github.com/mir-group/allegro/issues).
 If you have a question, topic, or issue that isn't obviously one of those, try our [GitHub Disucssions](https://github.com/mir-group/allegro/discussions).
