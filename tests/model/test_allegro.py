@@ -10,13 +10,16 @@ BASIC_INFO = {
 }
 
 COMMON_CONFIG = {
-    "num_bessels": 4,
+    "scalar_embed": {
+        "_target_": "allegro.nn.TwoBodyBesselScalarEmbed",
+        "num_bessels": 4,
+        "two_body_embedding_dim": 8,
+        "two_body_mlp_hidden_layer_depth": 1,
+        "two_body_mlp_hidden_layer_width": 32,
+    },
     "avg_num_neighbors": 5.0,  # very approximate to keep numerics sane
     "num_scalar_features": 32,
     "num_tensor_features": 4,
-    "two_body_embedding_dim": 8,
-    "two_body_mlp_hidden_layer_depth": 1,
-    "two_body_mlp_hidden_layer_width": 32,
     "allegro_mlp_hidden_layer_depth": 2,
     "allegro_mlp_hidden_layer_width": 32,
     "readout_mlp_hidden_layer_depth": 1,

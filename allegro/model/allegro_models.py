@@ -9,14 +9,9 @@ from nequip.nn import (
     ForceStressOutput,
 )
 
-from nequip.nn.embedding import (
-    PolynomialCutoff,
-    EdgeLengthNormalizer,
-    BesselEdgeLengthEncoding,
-)
+from nequip.nn.embedding import EdgeLengthNormalizer
 from allegro.nn import (
-    TwoBodySphericalHarmonicTensorEmbdedding,
-    ProductTypeEmbedding,
+    TwoBodySphericalHarmonicTensorEmbed,
     EdgewiseEnergySum,
     Allegro_Module,
     ScalarMLP,
@@ -55,10 +50,32 @@ def AllegroEnergyModel(
 
 @model_builder
 def AllegroModel(**kwargs):
-    """
+    """Allegro model that predicts energies and forces (and stresses if cell is provided).
+
     Args:
+        seed (int): seed for reproducibility
+        model_dtype (str): ``float32`` or ``float64``
+        r_max (float): cutoff radius
+        per_edge_type_cutoff (Dict): one can optionally specify cutoffs for each edge type [must be smaller than ``r_max``] (default ``None``)
+        type_names (Sequence[str]): list of atom type names
         l_max (int): maximum order l to use in spherical harmonics embedding, 1 is baseline (fast), 2 is more accurate, but slower, 3 highly accurate but slow
-        parity_setting (str): whether to include parity symmetry equivariance; options are ``o3_full``, ``o3_restricted``, ``so3``
+        parity_setting (str): parity symmetry equivariance setting -- options are ``o3_full``, ``o3_restricted``, ``so3``
+        scalar_embed: an Allegro-compatible two-body scalar embedding module, e.g. ``allegro.nn.TwoBodyBesselScalarEmbed``
+        num_layers (int): number of Allegro layers
+        num_scalar_features (int): multiplicity of scalar features in the Allegro layers
+        num_tensor_features (int): multiplicity of tensor features in the Allegro layers
+        allegro_mlp_hidden_layer_depth (int): number of layers in MLPs used at each Allegro layer
+        allegro_mlp_hidden_layer_width (int): number of neurons per layer in MLPs used at each Allegro layer
+        allegro_mlp_nonlinear (bool): whether the MLPs used at each Allegro layer use the ``silu`` nonlinearity
+        readout_mlp_hidden_layer_depth (int): number of layers in the readout MLP
+        readout_mlp_hidden_layer_width (int): number of neurons per layer in the readout MLP
+        readout_mlp_nonlinear (bool): whether the readout MLP uses the ``silu`` nonlinearity
+        avg_num_neighbors (float): used to normalize edge sums for better numerics (default ``None``)
+        per_type_energy_scales (float/List[float]): per-atom energy scales, which could be derived from the force RMS of the data (default ``None``)
+        per_type_energy_shifts (float/List[float]): per-atom energy shifts, which should generally be isolated atom reference energies or estimated from average pre-atom energies of the data (default ``None``)
+        per_type_energy_scales_trainable (bool): whether the per-atom energy scales are trainable (default ``False``)
+        per_type_energy_shifts_trainable (bool): whether the per-atom energy shifts are trainable (default ``False``)
+        pair_potential (torch.nn.Module): additional pair potential term, e.g. ``nequip.nn.pair_potential.ZBL`` (default ``None``)
     """
     return ForceStressOutput(AllegroEnergyModel(**kwargs))
 
@@ -70,32 +87,26 @@ def FullAllegroEnergyModel(
     # irreps
     irreps_edge_sh: Union[int, str, o3.Irreps],
     tensor_track_allowed_irreps: Union[str, o3.Irreps],
-    # two body embedding
-    two_body_embedding_dim: int,
-    two_body_mlp_hidden_layer_depth: int,
-    two_body_mlp_hidden_layer_width: int,
-    # allegro layers
-    num_layers: int,
-    num_scalar_features: int,
-    num_tensor_features: int,
-    allegro_mlp_hidden_layer_depth: int,
-    allegro_mlp_hidden_layer_width: int,
-    # readout
-    readout_mlp_hidden_layer_depth: int,
-    readout_mlp_hidden_layer_width: int,
-    # edge length encoding
+    # scalar embed
+    scalar_embed: Dict,
     per_edge_type_cutoff: Optional[Dict[str, Union[float, Dict[str, float]]]] = None,
-    num_bessels: int = 8,
-    bessel_trainable: bool = False,
-    polynomial_cutoff_p: int = 6,
-    radial_basis_mlp_kwargs: Dict = {},
+    # allegro layers
+    num_layers: int = 2,
+    num_scalar_features: int = 64,
+    num_tensor_features: int = 64,
+    allegro_mlp_hidden_layer_depth: int = 2,
+    allegro_mlp_hidden_layer_width: int = 64,
+    allegro_mlp_nonlinear: bool = True,
+    # readout
+    readout_mlp_hidden_layer_depth: int = 2,
+    readout_mlp_hidden_layer_width: int = 32,
+    readout_mlp_nonlinear: bool = True,
     # edge sum normalization
     avg_num_neighbors: Optional[float] = None,
     # allegro layers defaults
     tensors_mixing_mode: str = "p",
     tensor_track_weight_init: str = "uniform",
     weight_individual_irreps: bool = True,
-    latent_resnet: bool = True,
     # per atom energy params
     per_type_energy_scales: Optional[Union[float, Sequence[float]]] = None,
     per_type_energy_shifts: Optional[Union[float, Sequence[float]]] = None,
@@ -103,44 +114,30 @@ def FullAllegroEnergyModel(
     per_type_energy_shifts_trainable: Optional[bool] = False,
     pair_potential: Optional[Dict] = None,
 ):
-    # === two-body scalar encoding ===
+    # === two-body scalar embedding ===
     edge_norm = EdgeLengthNormalizer(
         r_max=r_max,
         type_names=type_names,
         per_edge_type_cutoff=per_edge_type_cutoff,
     )
-    bessel_encode = BesselEdgeLengthEncoding(
-        num_bessels=num_bessels,
-        trainable=bessel_trainable,
-        cutoff=PolynomialCutoff(polynomial_cutoff_p),
+    scalar_embed_module = instantiate(
+        scalar_embed,
+        type_names=type_names,
+        module_output_dim=num_scalar_features,
+        scalar_embed_field=AtomicDataDict.EDGE_EMBEDDING_KEY,
         irreps_in=edge_norm.irreps_out,
     )
-    typeembed = ProductTypeEmbedding(
-        type_names=type_names,
-        initial_embedding_dim=two_body_embedding_dim,
-        radial_features_in_field=AtomicDataDict.EDGE_EMBEDDING_KEY,
-        edge_embed_out_field=AtomicDataDict.EDGE_EMBEDDING_KEY,
-        irreps_in=bessel_encode.irreps_out,
-    )
+    # ^ note that this imposes a contract with two-body scalar embedding modules
+    # i.e. they must have `type_names`, `module_output_dim`, `scalar_embed_field`, `irreps_in`
 
-    twobody_mlp = ScalarMLP(
-        # input dims from previous module
-        field=AtomicDataDict.EDGE_EMBEDDING_KEY,
-        # output dims consistent with Allegro scalar dims
-        mlp_output_dim=num_scalar_features,
-        mlp_hidden_layer_depth=two_body_mlp_hidden_layer_depth,
-        mlp_hidden_layer_width=two_body_mlp_hidden_layer_width,
-        irreps_in=typeembed.irreps_out,
-    )
-
-    # === two-body tensor encoding ===
-    tensor_embed = TwoBodySphericalHarmonicTensorEmbdedding(
+    # === two-body tensor embedding ===
+    tensor_embed = TwoBodySphericalHarmonicTensorEmbed(
         irreps_edge_sh=irreps_edge_sh,
         num_tensor_features=num_tensor_features,
         scalar_embedding_in_field=AtomicDataDict.EDGE_EMBEDDING_KEY,
         tensor_basis_out_field=AtomicDataDict.EDGE_ATTRS_KEY,
         tensor_embedding_out_field=AtomicDataDict.EDGE_FEATURES_KEY,
-        irreps_in=twobody_mlp.irreps_out,
+        irreps_in=scalar_embed_module.irreps_out,
     )
 
     # === allegro module ===
@@ -154,6 +151,7 @@ def FullAllegroEnergyModel(
         latent_kwargs={
             "mlp_hidden_layer_depth": allegro_mlp_hidden_layer_depth,
             "mlp_hidden_layer_width": allegro_mlp_hidden_layer_width,
+            "mlp_nonlinearity": "silu" if allegro_mlp_nonlinear else None,
         },
         # best to use defaults for these
         tensors_mixing_mode=tensors_mixing_mode,
@@ -198,9 +196,7 @@ def FullAllegroEnergyModel(
 
     modules = {
         "edge_norm": edge_norm,
-        "bessel_encode": bessel_encode,
-        "typeembed": typeembed,
-        "twobody_mlp": twobody_mlp,
+        "scalar_embed": scalar_embed_module,
         "tensor_embed": tensor_embed,
         "allegro": allegro,
         "readout": readout,
@@ -212,7 +208,9 @@ def FullAllegroEnergyModel(
     prev_irreps_out = per_type_energy_scale_shift.irreps_out
     if pair_potential is not None:
         pair_potential = instantiate(
-            pair_potential, type_names=type_names, irreps_in=prev_irreps_out
+            pair_potential,
+            type_names=type_names,
+            irreps_in=prev_irreps_out,
         )
         prev_irreps_out = pair_potential.irreps_out
         modules.update({"pair_potential": pair_potential})

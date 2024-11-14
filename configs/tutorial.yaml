@@ -81,24 +81,25 @@ training_module:
     type_names: ${model_type_names}
     r_max: ${cutoff_radius}
 
-    # == bessel encoding ==
-    num_bessels: 8                # number of basis functions used in the radial Bessel basis, the default of 8 usually works well
-    bessel_trainable: false       # set true to train the bessel weights (default false)
-    polynomial_cutoff_p: 6        # p-exponent used in polynomial cutoff function, smaller p corresponds to stronger decay with distance
+    # == two-body scalar embedding ==
+    scalar_embed:
+      _target_: allegro.nn.TwoBodyBesselScalarEmbed
+      num_bessels: 8
+      bessel_trainable: false
+      polynomial_cutoff_p: 6
+      two_body_embedding_dim: 32
+      two_body_mlp_hidden_layer_depth: 2
+      two_body_mlp_hidden_layer_width: 64
+      two_body_mlp_nonlinear: true
 
-    # == two-body scalar embedding ===
-    two_body_embedding_dim: 32
-    two_body_mlp_hidden_layer_depth: 2
-    two_body_mlp_hidden_layer_width: 64
-
-    # === symmetry ===
+    # == symmetry ==
     # maximum order l to use in spherical harmonics embedding, 1 is baseline (fast), 2 is more accurate, but slower, 3 highly accurate but slow
     l_max: 1
     # whether to include parity symmetry equivariance
     # allowed: o3_full, o3_restricted, so3
     parity_setting: o3_full   
 
-    # === allegro layers ===
+    # == allegro layers ==
     # number of tensor product layers, 1-3 usually best, more is more accurate but slower
     num_layers: 2
     
@@ -109,10 +110,12 @@ training_module:
 
     allegro_mlp_hidden_layer_depth: 2
     allegro_mlp_hidden_layer_width: 128
+    allegro_mlp_nonlinear: true
 
-    # === readout ===
+    # == readout ==
     readout_mlp_hidden_layer_depth: 1
     readout_mlp_hidden_layer_width: 32
+    readout_mlp_nonlinear: true
 
     # average number of neighbors for edge sum normalization
     avg_num_neighbors: ${training_data_stats:num_neighbors_mean}
