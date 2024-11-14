@@ -154,7 +154,9 @@ def FullAllegroEnergyModel(
     )
 
     # === edge energy MLP ===
-    edge_eng_kwargs = OmegaConf.to_container(edge_eng_kwargs, resolve=True).copy()
+    if not isinstance(edge_eng_kwargs, dict):
+        edge_eng_kwargs = OmegaConf.to_container(edge_eng_kwargs, resolve=True)
+    edge_eng_kwargs = edge_eng_kwargs.copy()
     edge_eng_kwargs.update(
         {
             "irreps_in": allegro.irreps_out,
