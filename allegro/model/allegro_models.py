@@ -9,7 +9,11 @@ from nequip.nn import (
     ForceStressOutput,
 )
 
-from nequip.nn.embedding import EdgeLengthNormalizer
+from nequip.nn.embedding import (
+    EdgeLengthNormalizer,
+    AddRadialCutoffToData,
+    PolynomialCutoff,
+)
 from allegro.nn import (
     TwoBodySphericalHarmonicTensorEmbed,
     EdgewiseEnergySum,
@@ -207,6 +211,16 @@ def FullAllegroEnergyModel(
     # === pair potentials ===
     prev_irreps_out = per_type_energy_scale_shift.irreps_out
     if pair_potential is not None:
+
+        # case where model doesn't have edge cutoffs up to this point, but pair potential required
+        if AtomicDataDict.EDGE_CUTOFF_KEY not in prev_irreps_out:
+            cutoff = AddRadialCutoffToData(
+                cutoff=PolynomialCutoff(6),
+                irreps_in=prev_irreps_out,
+            )
+            prev_irreps_out = cutoff.irreps_out
+            modules.update({"cutoff": cutoff})
+
         pair_potential = instantiate(
             pair_potential,
             type_names=type_names,

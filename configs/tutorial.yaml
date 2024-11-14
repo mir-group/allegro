@@ -83,6 +83,7 @@ training_module:
 
     # == two-body scalar embedding ==
     scalar_embed:
+      # classic option is the Bessel scalar embedding module
       _target_: allegro.nn.TwoBodyBesselScalarEmbed
       num_bessels: 8
       bessel_trainable: false
@@ -91,6 +92,11 @@ training_module:
       two_body_mlp_hidden_layer_depth: 2
       two_body_mlp_hidden_layer_width: 64
       two_body_mlp_nonlinear: true
+
+      # one could also use the spline embedding module with less hyperparameters
+      #_target_: allegro.nn.TwoBodySplineScalarEmbed
+      #spline_grid: 5
+      #spline_span: 3
 
     # == symmetry ==
     # maximum order l to use in spherical harmonics embedding, 1 is baseline (fast), 2 is more accurate, but slower, 3 highly accurate but slow

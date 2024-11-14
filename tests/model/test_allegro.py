@@ -9,14 +9,21 @@ BASIC_INFO = {
     "r_max": 4.0,
 }
 
+BESSEL_CONFIG = {
+    "_target_": "allegro.nn.TwoBodyBesselScalarEmbed",
+    "num_bessels": 4,
+    "two_body_embedding_dim": 8,
+    "two_body_mlp_hidden_layer_depth": 1,
+    "two_body_mlp_hidden_layer_width": 32,
+}
+
+SPLINE_CONFIG = {
+    "_target_": "allegro.nn.TwoBodySplineScalarEmbed",
+    "spline_grid": 5,
+    "spline_span": 3,
+}
+
 COMMON_CONFIG = {
-    "scalar_embed": {
-        "_target_": "allegro.nn.TwoBodyBesselScalarEmbed",
-        "num_bessels": 4,
-        "two_body_embedding_dim": 8,
-        "two_body_mlp_hidden_layer_depth": 1,
-        "two_body_mlp_hidden_layer_width": 32,
-    },
     "avg_num_neighbors": 5.0,  # very approximate to keep numerics sane
     "num_scalar_features": 32,
     "num_tensor_features": 4,
@@ -53,7 +60,7 @@ minimal_config4 = dict(
     **COMMON_CONFIG,
 )
 minimal_config5 = dict(
-    l_max=3,
+    l_max=2,
     parity_setting="o3_full",
     num_layers=3,
     tensors_mixing_mode="uvvp",
@@ -74,6 +81,13 @@ class TestAllegro(BaseEnergyModelTests):
         return True
 
     @pytest.fixture(
+        params=[BESSEL_CONFIG, SPLINE_CONFIG],
+        scope="class",
+    )
+    def scalar_embed_config(self, request):
+        return request.param
+
+    @pytest.fixture(
         params=[
             minimal_config1,
             minimal_config2,
@@ -84,7 +98,8 @@ class TestAllegro(BaseEnergyModelTests):
         ],
         scope="class",
     )
-    def config(self, request):
+    def config(self, request, scalar_embed_config):
         config = request.param
         config = config.copy()
+        config.update({"scalar_embed": scalar_embed_config})
         return config
