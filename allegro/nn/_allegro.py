@@ -48,8 +48,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         tensor_track_weight_init: str = "uniform",
         weight_individual_irreps: bool = True,
         # MLP parameters:
-        two_body_latent=ScalarMLPFunction,
-        two_body_latent_kwargs={},
         env_embed=ScalarMLPFunction,
         env_embed_kwargs={},
         latent=ScalarMLPFunction,
@@ -90,8 +88,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         internal_weight_tp = tensors_mixing_mode != "uuulin"
 
         assert not any(
-            k.get("mlp_bias", False)
-            for k in (two_body_latent_kwargs, latent_kwargs, env_embed_kwargs)
+            k.get("mlp_bias", False) for k in (latent_kwargs, env_embed_kwargs)
         )
 
         # set up irreps
@@ -180,12 +177,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         del tps_irreps
 
         # Environment builder:
-        # For weighting the initial edge features:
-        self._edge_weighter = MakeWeightedChannels(
-            irreps_in=input_irreps,
-            multiplicity_out=num_tensor_features,
-            weight_individual_irreps=weight_individual_irreps,
-        )
+
         # - normalization -
         # we divide the env embed sums by sqrt(N) to normalize
         # note that if self_edge_tensor_product = False, then the number of neighbors being summed is one smaller
@@ -257,11 +249,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             generate_n_weights = (
                 self._env_weighter.weight_numel
             )  # the weight for the edge embedding
-            if layer_idx == 0:
-                # also need weights to embed the edge itself
-                # this is because the 2 body latent is mixed in with the first layer
-                # in terms of code
-                generate_n_weights += self._edge_weighter.weight_numel
 
             # the linear acts after the extractor
             self.linears.append(
@@ -279,15 +266,15 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             if layer_idx == 0:
                 # at the first layer, we have no invariants from previous TPs
                 self.latents.append(
-                    two_body_latent(
+                    latent(
                         mlp_input_dimension=(
                             (
-                                # initial edge invariants for the edge (radial-chemical embedding).
+                                # initial edge invariants for the edge
                                 self.irreps_in[self.edge_invariant_field].num_irreps
+                                + num_tensor_features * n_scalar_outs
                             )
                         ),
                         mlp_output_dimension=None,
-                        **two_body_latent_kwargs,
                     )
                 )
             else:
@@ -313,6 +300,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                         mlp_output_dimension=None,
                     )
                 )
+
             # the env embed MLP takes the last latent's output as input
             # and outputs enough weights for the env embedder
             self.env_embed_mlps.append(
@@ -323,20 +311,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             )
             del generate_n_weights
 
-        # For the final layer, we specialize:
-        # we don't need to propagate tensors, so there is no TP
-        # thus we only need the latent:
-        self.final_latent = latent(
-            mlp_input_dimension=(
-                self.latents[-1].out_features
-                if self.latent_resnet
-                else sum(mlp.out_features for mlp in self.latents)
-            )
-            # here we use self._n_scalar_outs[-1] since we haven't appended anything to it
-            # so it is still the correct n_scalar_outs for the previous (and last) TP
-            + num_tensor_features * self._n_scalar_outs[-1],
-            mlp_output_dimension=None,
-        )
         # - end build modules -
         for l in self.latents + [self.final_latent]:
             if not l.is_nonlinear:
@@ -370,13 +344,13 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 "_latent_resnet_coefficients_params", latent_resnet_coefficients_params
             )
 
-        self._latent_dim = self.final_latent.out_features
+        self._latent_dim = self.latents[-1].out_features
         self.register_buffer("_zero", torch.as_tensor(0.0))
 
         self.irreps_out.update(
             {
                 self.latent_out_field: o3.Irreps(
-                    [(self.final_latent.out_features, (0, 1))]
+                    [(self.latents[-1].out_features, (0, 1))]
                 ),
             }
         )
@@ -390,18 +364,19 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         edge_center = data[AtomicDataDict.EDGE_INDEX_KEY][0]
         num_atoms: int = AtomicDataDict.num_nodes(data)
 
+        # unweighted two-body tensor embedding (i.e. spherical harmonics)
         edge_attr = data[self.field]
-        edge_invariants = data[self.edge_invariant_field]
+        # weighted two-body tensor features
+        features = data[AtomicDataDict.EDGE_FEATURES_KEY]
+
+        # two-body scalar embedding
+        latents = data[self.edge_invariant_field]
+        latent_inputs_to_cat = [latents]
+
         # pre-declare variables as Tensors for TorchScript
         scalars = self._zero
         coefficient_old = self._zero
         coefficient_new = self._zero
-        latents = self._zero
-
-        # For the first layer, we use the input edge invariants
-        latent_inputs_to_cat = [edge_invariants]
-        # The nonscalar features. Initially, the edge data.
-        features = edge_attr
 
         layer_index: int = 0
         # precompute the exp() and cumsum for each layer
@@ -415,53 +390,15 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         # add 1e-12 so that we never divide by zero (though that is extremely unlikely)
         latent_coefficients_cumsum = latent_coefficients.cumsum(dim=0) + 1e-12
 
-        prev_latents_for_next = []
+        prev_latents_for_next = [latents]
 
         # !!!! REMEMBER !!!! update final layer if update the code in main loop!!!
         # This goes through layer0, layer1, ..., layer_max-1
         for latent, env_embed_mlp, tp, linear in zip(
             self.latents, self.env_embed_mlps, self.tps, self.linears
         ):
-            # Compute latents
-            new_latents = latent(torch.cat(latent_inputs_to_cat, dim=-1))
-
-            if self.latent_resnet and layer_index > 0:
-                # previous normalization denominator / new normalization denominator
-                # ^ cancels the old normalization, and ^ applies new
-                # sqrt accounts for stdev vs variance
-                # at the 2nd layer the cumsum is just the first coefficient, so this multiplies the
-                # previous latents (which hadn't been multiplied by anything) by coeff_0 / coeff_0 + coeff_1
-                coefficient_old = (
-                    latent_coefficients_cumsum[layer_index - 1]
-                    / latent_coefficients_cumsum[layer_index]
-                ).sqrt()
-                # just take the coefficient for the new latents
-                coefficient_new = (
-                    latent_coefficients[layer_index]
-                    / latent_coefficients_cumsum[layer_index]
-                ).sqrt()
-                # Residual update
-                # Note that it only runs when there are latents to resnet with
-                latents = coefficient_old * latents + coefficient_new * new_latents
-                prev_latents_for_next = [latents]
-            else:
-                # Normal (non-residual) update
-                latents = new_latents
-                prev_latents_for_next.append(latents)
-
             # From the latents, compute the weights for active edges:
-            weights = env_embed_mlp(latents)
-            w_index: int = 0
-
-            if layer_index == 0:
-                # embed initial edge
-                env_w = weights.narrow(-1, w_index, self._edge_weighter.weight_numel)
-                w_index += self._edge_weighter.weight_numel
-                features = self._edge_weighter(features, env_w)  # features is edge_attr
-
-            # Extract weights for the environment builder
-            env_w = weights.narrow(-1, w_index, self._env_weighter.weight_numel)
-            w_index += self._env_weighter.weight_numel
+            env_w = env_embed_mlp(latents)
 
             # Build the local environments
             # This local environment is a sum over neighbors
@@ -504,27 +441,35 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             # This makes it deep
             latent_inputs_to_cat = prev_latents_for_next + [scalars]
 
+            # Compute latents
+            new_latents = latent(torch.cat(latent_inputs_to_cat, dim=-1))
+
+            if self.latent_resnet and layer_index > 0:
+                # previous normalization denominator / new normalization denominator
+                # ^ cancels the old normalization, and ^ applies new
+                # sqrt accounts for stdev vs variance
+                # at the 2nd layer the cumsum is just the first coefficient, so this multiplies the
+                # previous latents (which hadn't been multiplied by anything) by coeff_0 / coeff_0 + coeff_1
+                coefficient_old = (
+                    latent_coefficients_cumsum[layer_index - 1]
+                    / latent_coefficients_cumsum[layer_index]
+                ).sqrt()
+                # just take the coefficient for the new latents
+                coefficient_new = (
+                    latent_coefficients[layer_index]
+                    / latent_coefficients_cumsum[layer_index]
+                ).sqrt()
+                # Residual update
+                # Note that it only runs when there are latents to resnet with
+                latents = coefficient_old * latents + coefficient_new * new_latents
+                prev_latents_for_next = [latents]
+            else:
+                # Normal (non-residual) update
+                latents = new_latents
+                prev_latents_for_next = [latents]
+
             # increment counter
             layer_index += 1
-
-        # - final layer -
-        # due to TorchScript limitations, we have to
-        # copy and repeat the code here --- no way to
-        # escape the final iteration of the loop early
-        new_latents = self.final_latent(torch.cat(latent_inputs_to_cat, dim=-1))
-        if self.latent_resnet:
-            coefficient_old = (
-                latent_coefficients_cumsum[layer_index - 1]
-                / latent_coefficients_cumsum[layer_index]
-            ).sqrt()
-            coefficient_new = (
-                latent_coefficients[layer_index]
-                / latent_coefficients_cumsum[layer_index]
-            ).sqrt()
-            latents = coefficient_old * latents + coefficient_new * new_latents
-        else:
-            latents = new_latents
-        # - end final layer -
 
         # final latents
         data[self.latent_out_field] = latents
