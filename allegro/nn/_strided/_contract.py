@@ -211,7 +211,9 @@ class Contracter(torch.nn.Module):
         # We arange the einstr to do in order:
         #  zui,zuj->zuij (outer product)
         #  zuij,ijk->zuk  (matmul)
-        self._contract_einstr = f"z{u}i,z{v}{j},{weight_label.rstrip('p')}k{ij}->z{w}k"
+        uv = u if u == v else f"{u}{v}"
+        self._outer_einstr = f"z{u}i,z{v}{j}->z{uv}{ij}"
+        self._matmul_einstr = f"z{uv}{ij},{weight_label.rstrip('p')}k{ij}->z{w}k"
 
     def forward(self, x1: torch.Tensor, x2: torch.Tensor) -> torch.Tensor:
         # convert to strided shape
@@ -222,5 +224,6 @@ class Contracter(torch.nn.Module):
         # multiplied in anyway at some point
         ww3j = torch.einsum(self._weight_w3j_einstr, self.weights, self.w3j)
         # now do the TP with the pre-contracted w3j
-        out = torch.einsum(self._contract_einstr, x1, x2, ww3j)
+        outer = torch.einsum(self._outer_einstr, x1, x2)
+        out = torch.einsum(self._matmul_einstr, outer, ww3j)
         return out
