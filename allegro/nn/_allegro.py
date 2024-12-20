@@ -8,7 +8,7 @@ from e3nn import o3
 from e3nn.util.jit import compile_mode
 
 from nequip.data import AtomicDataDict
-from nequip.nn import GraphModuleMixin, scatter, tp_path_exists
+from nequip.nn import GraphModuleMixin, tp_path_exists
 
 from ._fc import ScalarMLPFunction
 from ._strided import Contracter, MakeWeightedChannels
@@ -301,18 +301,10 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             # We apply the normalization constant to the env_w weights inside the `_env_weighter`, since everything here before the TP is linear and the env_w is likely smallest since it only contains the scalars.
             # It is applied via _env_weighter's alpha
             env_w_edges = self._env_weighter(tensor_basis, env_w)
-            local_env_per_edge = scatter(
-                env_w_edges,
-                edge_center,
-                dim=0,
-                dim_size=num_atoms,
-            )
-            # make it per edge
-            local_env_per_edge = torch.index_select(local_env_per_edge, 0, edge_center)
 
-            # Now do the TP
-            # recursively tp current features with the environment embeddings
-            tensor_features = tp(tensor_features, local_env_per_edge)
+            # TP current features with the environment embeddings
+            # scatter and indexing included in the TP
+            tensor_features = tp(tensor_features, env_w_edges, edge_center, num_atoms)
 
             # Extract invariants from tensor track
             # features has shape [z][mul][k], where scalars are first

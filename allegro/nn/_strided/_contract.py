@@ -6,6 +6,7 @@ import torch
 from e3nn import o3
 from e3nn.util import prod
 
+from nequip.nn import scatter
 from ._layout import StridedLayout
 from .._misc import _init_weight
 
@@ -215,7 +216,22 @@ class Contracter(torch.nn.Module):
         self._outer_einstr = f"z{u}i,z{v}{j}->z{uv}{ij}"
         self._matmul_einstr = f"z{uv}{ij},{weight_label.rstrip('p')}k{ij}->z{w}k"
 
-    def forward(self, x1: torch.Tensor, x2: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        x1: torch.Tensor,
+        x2: torch.Tensor,
+        idxs: torch.Tensor,
+        scatter_dim_size: int,
+    ) -> torch.Tensor:
+        # scatter and index select
+        x2_scatter = scatter(
+            x2,
+            idxs,
+            dim=0,
+            dim_size=scatter_dim_size,
+        )
+        x2 = torch.index_select(x2_scatter, 0, idxs)
+
         # convert to strided shape
         x1 = x1.reshape(-1, self.mul1, self.base_dim1)
         x2 = x2.reshape(-1, self.mul2, self.base_dim2)
