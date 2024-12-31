@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from math import sqrt
 
 import torch
@@ -31,8 +31,11 @@ class Contracter(torch.nn.Module):
         connection_mode: str,
         initialization: str = "uniform",
         normalization: str = "component",
+        scatter_factor: Optional[float] = None,
     ):
         super().__init__()
+        self.scatter_factor = scatter_factor
+
         # -- Irrep management --
         irreps_in1 = o3.Irreps(irreps_in1)
         assert all(mul == irreps_in1[0].mul for mul, ir in irreps_in1)
@@ -223,6 +226,10 @@ class Contracter(torch.nn.Module):
         idxs: torch.Tensor,
         scatter_dim_size: int,
     ) -> torch.Tensor:
+
+        # normalize if normalization provided
+        if self.scatter_factor is not None:
+            x2 = self.scatter_factor * x2
         # scatter and index select
         x2_scatter = scatter(
             x2,

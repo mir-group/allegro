@@ -30,6 +30,8 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         tensors_mixing_mode: str = "p",
         tensor_track_weight_init: str = "uniform",
         weight_individual_irreps: bool = True,
+        scatter_features: bool = True,
+        # ^ scatter V_ik, alternative is to scatter embedded environment w_ij Y_ij
         # MLP parameters:
         latent=ScalarMLPFunction,
         latent_kwargs={},
@@ -57,6 +59,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         self.num_layers = num_layers
         self.num_scalar_features = num_scalar_features
         self.num_tensor_features = num_tensor_features
+        self.scatter_features = scatter_features
         self.tensor_track_allowed_irreps = o3.Irreps(tensor_track_allowed_irreps)
         assert set(mul for mul, ir in self.tensor_track_allowed_irreps) == {1}
 
@@ -155,18 +158,18 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         tps_irreps_out = tps_irreps[1:]
         del tps_irreps
 
-        # === env weighter ===
+        # === edge `scatter` normalization ===
         env_sum_constant = 1.0
         if avg_num_neighbors is not None:
             # we divide the env embed sums by sqrt(N) to normalize
             env_sum_constant = 1.0 / math.sqrt(avg_num_neighbors)
+
+        # === env weighter ===
         self._env_weighter = MakeWeightedChannels(
             irreps_in=input_irreps,
             multiplicity_out=self.num_tensor_features,
             weight_individual_irreps=weight_individual_irreps,
-            alpha=env_sum_constant,
         )
-        del env_sum_constant
 
         # === first layer linear projection ===
         # hardcode linear projection: twobody features -> twobody features + env weights
@@ -186,13 +189,21 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         for layer_idx, (arg_irreps, out_irreps) in enumerate(
             zip(tps_irreps_in, tps_irreps_out)
         ):
+            # irin2 is the scattered feature
+            if self.scatter_features:
+                irin1 = env_embed_irreps
+                irin2 = arg_irreps
+            else:
+                irin1 = arg_irreps
+                irin2 = env_embed_irreps
+
             tmp_i_out: int = 0
             instr = []
             n_scalar_outs: int = 0
             full_out_irreps = out_irreps if internal_weight_tp else []
             for i_out, (_, ir_out) in enumerate(out_irreps):
-                for i_1, (_, ir_1) in enumerate(arg_irreps):
-                    for i_2, (_, ir_2) in enumerate(env_embed_irreps):
+                for i_1, (_, ir_1) in enumerate(irin1):
+                    for i_2, (_, ir_2) in enumerate(irin2):
                         if ir_out in ir_1 * ir_2:
                             if internal_weight_tp:
                                 if ir_out == SCALAR:
@@ -212,10 +223,10 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             assert all(ir == SCALAR for _, ir in full_out_irreps[:n_scalar_outs])
             tp = Contracter(
                 irreps_in1=o3.Irreps(
-                    [(self.num_tensor_features, ir) for _, ir in arg_irreps]
+                    [(self.num_tensor_features, ir) for _, ir in irin1]
                 ),
                 irreps_in2=o3.Irreps(
-                    [(self.num_tensor_features, ir) for _, ir in env_embed_irreps]
+                    [(self.num_tensor_features, ir) for _, ir in irin2]
                 ),
                 irreps_out=o3.Irreps(
                     [(self.num_tensor_features, ir) for _, ir in full_out_irreps]
@@ -223,6 +234,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 instructions=instr,
                 connection_mode=tp_tensors_mixing_mode,
                 initialization=tensor_track_weight_init,
+                scatter_factor=env_sum_constant,
             )
             self.tps.append(tp)
             del tp
@@ -300,15 +312,16 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         layer_index: int = 0
         for latent, tp in zip(self.latents, self.tps):
             # === Env Weight & TP ===
-            # Build the local environments
-            # This local environment is a sum over neighbors
-            # We apply the normalization constant to the env_w weights inside the `_env_weighter`, since everything here before the TP is linear and the env_w is likely smallest since it only contains the scalars.
-            # It is applied via _env_weighter's alpha
             env_w_edges = self._env_weighter(tensor_basis, env_w)
-
-            # TP current features with the environment embeddings
-            # scatter and indexing included in the TP
-            tensor_features = tp(tensor_features, env_w_edges, edge_center, num_atoms)
+            # depending on `self.scatter_features`, scatter `env_w_edges` or `tensor_features`, and TP them together
+            # second input irreps is the one that is scattered
+            if self.scatter_features:
+                irin1 = env_w_edges
+                irin2 = tensor_features
+            else:
+                irin1 = tensor_features
+                irin2 = env_w_edges
+            tensor_features = tp(irin1, irin2, edge_center, num_atoms)
 
             # Extract invariants from tensor track
             # features has shape [z][mul][k], where scalars are first

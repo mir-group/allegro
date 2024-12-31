@@ -111,6 +111,7 @@ def FullAllegroEnergyModel(
     tensors_mixing_mode: str = "p",
     tensor_track_weight_init: str = "uniform",
     weight_individual_irreps: bool = True,
+    scatter_features: bool = False,
     # per atom energy params
     per_type_energy_scales: Optional[Union[float, Sequence[float]]] = None,
     per_type_energy_shifts: Optional[Union[float, Sequence[float]]] = None,
@@ -161,6 +162,7 @@ def FullAllegroEnergyModel(
         tensors_mixing_mode=tensors_mixing_mode,
         tensor_track_weight_init=tensor_track_weight_init,
         weight_individual_irreps=weight_individual_irreps,
+        scatter_features=scatter_features,
         # fields
         tensor_basis_in_field=AtomicDataDict.EDGE_ATTRS_KEY,
         tensor_features_in_field=AtomicDataDict.EDGE_FEATURES_KEY,
