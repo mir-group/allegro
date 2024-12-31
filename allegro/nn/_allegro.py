@@ -49,6 +49,10 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         )  # zero layers is "two body", but we don't need to support that fallback case
         assert not any(k.get("mlp_bias", False) for k in (latent_kwargs,))
 
+        assert (
+            avg_num_neighbors is not None
+        ), "`avg_num_neighbors` must be set for Allegro models, but `avg_num_neighbors=None` found"
+
         # === save parameters ===
         self.num_layers = num_layers
         self.num_scalar_features = num_scalar_features
