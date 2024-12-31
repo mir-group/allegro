@@ -58,16 +58,22 @@ def test_contract(
         c_opt_mod.weights.copy_(c_base.weights)
     c_opt_mod = torch.jit.script(c_opt_mod)
 
-    def c_opt(x, y, w=None):
-        args = (x, y, w)
+    def c_opt(x, y, idx, dim, w=None):
+        args = (x, y, idx, dim, w)
         if w is None:
             args = args[:-1]
         return c_opt_mod(*args)
 
     batchdim = 7
+    # scatter_dim = torch.tensor([2], dtype=torch.long)
+    # scatter_idxs = torch.randint(0, high=scatter_dim, size=(batchdim,))
+    scatter_dim = torch.tensor([batchdim], dtype=torch.long)
+    scatter_idxs = torch.arange(batchdim)
     args_in = (
         irreps_in1.randn(batchdim, mul1, -1),
         irreps_in2.randn(batchdim, mul2, -1),
+        scatter_idxs,
+        scatter_dim,
         torch.randn(tuple(batchdim if e == -1 else e for e in c_base.weights.shape)),
     )
     args_in = args_in[:-1]
@@ -76,7 +82,7 @@ def test_contract(
         assert_equivariant(
             c,
             args_in=args_in,
-            irreps_in=[irreps_in1, irreps_in2],
+            irreps_in=[irreps_in1, irreps_in2, None, None],
             irreps_out=irreps_out,
         )
 
@@ -150,9 +156,13 @@ def test_like_tp(
         connection_mode=mode,
     )
     batchdim = 7
+    scatter_dim = torch.tensor([batchdim], dtype=torch.long)
+    scatter_idxs = torch.arange(batchdim)
     args_in = (
         torch.randn(batchdim, mul1, c.base_dim1),
         torch.randn(batchdim, mul2, c.base_dim2),
+        scatter_idxs,
+        scatter_dim,
         c.weights,
     )
 
@@ -169,7 +179,7 @@ def test_like_tp(
     # to convert the weights, note that for Contracter
     # the weights are zuvwp. For TensorProduct, they are
     # catted uvw, so zpuvw
-    weights_tp = args_in[2]
+    weights_tp = args_in[-1]
     if len(instr) > 1:
         weights_tp = (
             weights_tp.detach()
