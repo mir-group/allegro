@@ -1,7 +1,5 @@
 from typing import List, Optional, Union
 import math
-import operator
-import functools
 
 import torch
 from torch import fx
@@ -9,14 +7,12 @@ from torch import fx
 from e3nn import o3
 from e3nn.util.jit import compile_mode
 from e3nn.util.codegen import CodeGenMixin
-from e3nn.math import normalize2mom
 
 from nequip.data import AtomicDataDict
 from nequip.nn import GraphModuleMixin
 from nequip.nn.nonlinearities import ShiftedSoftPlus
 
 from allegro.utils import to_int_list
-from ._misc import _init_weight
 
 
 @compile_mode("script")
@@ -33,8 +29,6 @@ class ScalarMLP(GraphModuleMixin, torch.nn.Module):
         mlp_hidden_layer_depth: Optional[int] = None,
         mlp_hidden_layer_width: Optional[int] = None,
         mlp_nonlinearity: Optional[str] = "silu",
-        mlp_initialization: str = "uniform",
-        mlp_bias: bool = False,
         mlp_bfloat16: bool = False,
         field: str = AtomicDataDict.NODE_FEATURES_KEY,
         out_field: Optional[str] = None,
@@ -57,8 +51,6 @@ class ScalarMLP(GraphModuleMixin, torch.nn.Module):
             mlp_hidden_layer_width=mlp_hidden_layer_width,
             mlp_output_dim=mlp_output_dim,
             mlp_nonlinearity=mlp_nonlinearity,
-            mlp_initialization=mlp_initialization,
-            mlp_bias=mlp_bias,
             mlp_bfloat16=mlp_bfloat16,
         )
         self.irreps_out[self.out_field] = o3.Irreps(
@@ -88,13 +80,9 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
         mlp_hidden_layer_width: Optional[int] = None,
         mlp_extra_output_dim: int = 0,
         mlp_nonlinearity: Optional[str] = "silu",
-        mlp_initialization: str = "uniform",
-        mlp_bias: bool = False,
         mlp_bfloat16: bool = False,
     ):
         super().__init__()
-
-        assert not mlp_bias, "MLPs used in Allegro should not have a bias"
 
         # === handle nonlinearity ===
         nonlinearity = {
@@ -105,10 +93,6 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
             "silu": torch.nn.functional.silu,
             "ssp": ShiftedSoftPlus,
         }[mlp_nonlinearity]
-        if nonlinearity is not None:
-            nonlin_const = normalize2mom(nonlinearity).cst
-        else:
-            nonlin_const = 1.0
         self.is_nonlinear = False  # updated in codegen below
 
         # === handle MLP dimensions ===
@@ -151,15 +135,19 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
         # make weights
         for layer, (h_in, h_out) in enumerate(zip(self.dims, self.dims[1:])):
             w = torch.empty(h_in, h_out)
-            _init_weight(w, mlp_initialization, allow_orthogonal=True)
+            # normalize with output dim, i.e. normalize backwards pass for forces
+            if nonlinearity is None or layer == self.num_layers - 1:
+                # i.e. kaiming with no gain since no nonlinearity or last layer
+                bound = math.sqrt(3 / h_out)
+                torch.nn.init.uniform_(w, a=-bound, b=bound)
+            else:
+                # use kaiming uniform (see note on w.T)
+                # https://pytorch.org/docs/stable/nn.init.html#torch.nn.init.kaiming_uniform_
+                # even though we use SiLU, we just use the ReLU gain
+                torch.nn.init.kaiming_uniform_(w.T, mode="fan_out", nonlinearity="relu")
             if mlp_bfloat16:
                 w = w.to(torch.bfloat16)
             params[f"_weight_{layer}"] = w
-            if mlp_bias:
-                b = torch.zeros(1, h_out)
-                if mlp_bfloat16:
-                    b = b.to(torch.bfloat16)
-                params[f"_bias_{layer}"] = b
 
         # generate code
         features = Proxy(graph.placeholder("x"))
@@ -167,32 +155,12 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
             Proxy(graph.get_attr(f"_weight_{layer}"))
             for layer in range(len(self.dims) - 1)
         ]
-        if mlp_bias:
-            biases = [
-                Proxy(graph.get_attr(f"_bias_{layer}"))
-                for layer in range(len(self.dims) - 1)
-            ]
-        else:
-            base.register_buffer(
-                "_bias_dummy",
-                torch.as_tensor(
-                    0.0,
-                    dtype=torch.bfloat16 if mlp_bfloat16 else torch.get_default_dtype(),
-                ),
-            )
-            biases = [Proxy(graph.get_attr("_bias_dummy"))] * (len(self.dims) - 1)
 
-        if (len(weights) > 1) and (not mlp_bias) and (nonlinearity is None):
+        if (len(weights) > 1) and (nonlinearity is None):
             # we can special case since the whole thing is linear
             # we don't special case the linear projection case since:
             #  1) addmm can fuse the scalar multiply
             #  2) multi_dot doesn't support the identity case
-            norm_constant = 1.0 / functools.reduce(
-                operator.mul, [math.sqrt(float(d)) for d in self.dims[:-1]]
-            )
-            # matmul is linear
-            weights[0] = weights[0] * norm_constant
-            # apply the first layer first
             # Originally, we have:
             # ((x @ W1) @ W2 ) @ W3 = (W3 @ (W2 @ (W1 @ x)))^T = x @ (W3 @ W2 @ W1)^T
             total_weight = torch.linalg.multi_dot(weights)
@@ -200,21 +168,12 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
             features = torch.mm(features, total_weight)
         else:
             # generate normal full MLP code
-            norm_from_last: float = 1.0
-            for layer, (h_in, h_out, w, bias) in enumerate(
-                zip(self.dims, self.dims[1:], weights, biases)
-            ):
-                # computes beta*bias + alpha*(features @ w)
-                alpha = norm_from_last / math.sqrt(float(h_in))
-                w = alpha * w  # allow it to be precomputed at inference
+            for layer, w in enumerate(weights):
                 features = features @ w
-
                 # generate nonlinearity code
                 if nonlinearity is not None and layer < num_layers - 1:
                     features = nonlinearity(features)
                     self.is_nonlinear = True  # one nonlinearity applied means the whole MLP is nonlinear
-                    # add the normalization const in next layer
-                    norm_from_last = nonlin_const
 
         graph.output(features.node)
 

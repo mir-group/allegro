@@ -76,7 +76,6 @@ class TwoBodySphericalHarmonicTensorEmbed(GraphModuleMixin, torch.nn.Module):
             mlp_hidden_layer_dims=[],
             mlp_output_dim=self._edge_weighter.weight_numel,
             mlp_nonlinearity=None,
-            mlp_bias=False,
         )
         assert not self.env_embed_linear.is_nonlinear
 

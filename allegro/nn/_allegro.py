@@ -180,7 +180,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             mlp_hidden_layer_width=None,
             mlp_output_dim=self.num_scalar_features + self._env_weighter.weight_numel,
             mlp_nonlinearity=None,
-            mlp_bias=False,
         )
         assert not self.first_layer_env_embed_projection.is_nonlinear
 

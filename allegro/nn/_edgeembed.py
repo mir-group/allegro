@@ -61,7 +61,6 @@ class ProductTypeEmbedding(GraphModuleMixin, torch.nn.Module):
             mlp_hidden_layer_dims=[],
             mlp_output_dim=initial_embedding_dim,
             mlp_nonlinearity=None,
-            mlp_bias=None,
         )
         assert not self.basis_linear.is_nonlinear
 
