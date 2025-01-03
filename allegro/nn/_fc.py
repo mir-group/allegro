@@ -91,6 +91,8 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
             "null": None,
             "None": None,
             "silu": torch.nn.functional.silu,
+            "mish": torch.nn.functional.mish,
+            "gelu": torch.nn.functional.gelu,
             "ssp": ShiftedSoftPlus,
         }[mlp_nonlinearity]
         self.is_nonlinear = False  # updated in codegen below

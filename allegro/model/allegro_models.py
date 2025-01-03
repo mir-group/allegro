@@ -70,10 +70,10 @@ def AllegroModel(**kwargs):
         num_tensor_features (int): multiplicity of tensor features in the Allegro layers
         allegro_mlp_hidden_layer_depth (int): number of layers in MLPs used at each Allegro layer
         allegro_mlp_hidden_layer_width (int): number of neurons per layer in MLPs used at each Allegro layer
-        allegro_mlp_nonlinear (bool): whether the MLPs used at each Allegro layer use the ``silu`` nonlinearity
+        allegro_mlp_nonlinearity (str): ``silu``, ``mish``, ``gelu``, or ``None`` (default ``silu``)
         readout_mlp_hidden_layer_depth (int): number of layers in the readout MLP
         readout_mlp_hidden_layer_width (int): number of neurons per layer in the readout MLP
-        readout_mlp_nonlinear (bool): whether the readout MLP uses the ``silu`` nonlinearity
+        readout_mlp_nonlinearity (str): ``silu``, ``mish``, ``gelu``, or ``None`` (default ``None``)
         avg_num_neighbors (float): used to normalize edge sums for better numerics (default ``None``)
         per_type_energy_scales (float/List[float]): per-atom energy scales, which could be derived from the force RMS of the data (default ``None``)
         per_type_energy_shifts (float/List[float]): per-atom energy shifts, which should generally be isolated atom reference energies or estimated from average pre-atom energies of the data (default ``None``)
@@ -100,11 +100,11 @@ def FullAllegroEnergyModel(
     num_tensor_features: int = 64,
     allegro_mlp_hidden_layer_depth: int = 2,
     allegro_mlp_hidden_layer_width: int = 64,
-    allegro_mlp_nonlinear: bool = True,
+    allegro_mlp_nonlinearity: Optional[str] = "silu",
     # readout
     readout_mlp_hidden_layer_depth: int = 2,
     readout_mlp_hidden_layer_width: int = 32,
-    readout_mlp_nonlinear: bool = True,
+    readout_mlp_nonlinearity: Optional[str] = None,
     # edge sum normalization
     avg_num_neighbors: Optional[float] = None,
     # allegro layers defaults
@@ -156,7 +156,7 @@ def FullAllegroEnergyModel(
         latent_kwargs={
             "mlp_hidden_layer_depth": allegro_mlp_hidden_layer_depth,
             "mlp_hidden_layer_width": allegro_mlp_hidden_layer_width,
-            "mlp_nonlinearity": "silu" if allegro_mlp_nonlinear else None,
+            "mlp_nonlinearity": allegro_mlp_nonlinearity,
         },
         # best to use defaults for these
         tensors_mixing_mode=tensors_mixing_mode,
@@ -176,7 +176,7 @@ def FullAllegroEnergyModel(
         mlp_output_dim=1,
         mlp_hidden_layer_depth=readout_mlp_hidden_layer_depth,
         mlp_hidden_layer_width=readout_mlp_hidden_layer_width,
-        mlp_nonlinearity="silu" if readout_mlp_nonlinear else None,
+        mlp_nonlinearity=readout_mlp_nonlinearity,
         field=AtomicDataDict.EDGE_FEATURES_KEY,
         out_field=AtomicDataDict.EDGE_ENERGY_KEY,
         irreps_in=allegro.irreps_out,

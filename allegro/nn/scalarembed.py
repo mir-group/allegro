@@ -12,7 +12,7 @@ from ._edgeembed import ProductTypeEmbedding
 from ._fc import ScalarMLP
 from .spline import PerClassSpline
 
-from typing import Sequence
+from typing import Sequence, Optional
 
 
 def TwoBodyBesselScalarEmbed(
@@ -25,7 +25,7 @@ def TwoBodyBesselScalarEmbed(
     two_body_embedding_dim: int = 32,
     two_body_mlp_hidden_layer_depth: int = 2,
     two_body_mlp_hidden_layer_width: int = 64,
-    two_body_mlp_nonlinear: bool = True,
+    two_body_mlp_nonlinearity: Optional[str] = "silu",
     module_output_dim: int = 64,
     scalar_embed_field: str = AtomicDataDict.EDGE_EMBEDDING_KEY,
     irreps_in=None,
@@ -46,7 +46,7 @@ def TwoBodyBesselScalarEmbed(
         two_body_embedding_dim: int = 32,
         two_body_mlp_hidden_layer_depth: int = 2,
         two_body_mlp_hidden_layer_width: int = 64,
-        two_body_mlp_nonlinear (bool): whether the two-body MLP has a ``silu`` nonlinearity
+        two_body_mlp_nonlinearity (str): ``silu``, ``mish``, ``gelu``, or ``None`` (default ``silu``)
     """
     # the following args are for internal use in model building:
     # `type_names`, `module_output_dim`, `scalar_embed_field`, `irreps_in`
@@ -73,7 +73,7 @@ def TwoBodyBesselScalarEmbed(
         mlp_output_dim=module_output_dim,
         mlp_hidden_layer_depth=two_body_mlp_hidden_layer_depth,
         mlp_hidden_layer_width=two_body_mlp_hidden_layer_width,
-        mlp_nonlinearity="silu" if two_body_mlp_nonlinear else None,
+        mlp_nonlinearity=two_body_mlp_nonlinearity,
         irreps_in=type_embed.irreps_out,
     )
 
