@@ -38,7 +38,6 @@ minimal_config1 = dict(
     l_max=1,
     parity_setting="o3_full",
     num_layers=1,
-    scatter_features=False,
     **COMMON_CONFIG,
 )
 minimal_config2 = dict(
@@ -58,7 +57,6 @@ minimal_config4 = dict(
     l_max=3,
     parity_setting="o3_full",
     num_layers=3,
-    scatter_features=False,
     **COMMON_CONFIG,
 )
 minimal_config5 = dict(
@@ -66,7 +64,6 @@ minimal_config5 = dict(
     parity_setting="o3_full",
     num_layers=3,
     tensors_mixing_mode="uvvp",
-    scatter_features=False,
     **COMMON_CONFIG,
 )
 minimal_config6 = dict(
@@ -91,6 +88,13 @@ class TestAllegro(BaseEnergyModelTests):
         return request.param
 
     @pytest.fixture(
+        params=[True, False],
+        scope="class",
+    )
+    def scatter_features(self, request):
+        return request.param
+
+    @pytest.fixture(
         params=[
             minimal_config1,
             minimal_config2,
@@ -101,8 +105,9 @@ class TestAllegro(BaseEnergyModelTests):
         ],
         scope="class",
     )
-    def config(self, request, scalar_embed_config):
+    def config(self, request, scalar_embed_config, scatter_features):
         config = request.param
         config = config.copy()
         config.update({"scalar_embed": scalar_embed_config})
+        config.update({"scatter_features": scatter_features})
         return config
