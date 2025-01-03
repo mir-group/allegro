@@ -49,7 +49,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         assert (
             num_layers >= 1
         )  # zero layers is "two body", but we don't need to support that fallback case
-        assert not any(k.get("mlp_bias", False) for k in (latent_kwargs,))
 
         assert (
             avg_num_neighbors is not None
