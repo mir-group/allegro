@@ -84,7 +84,8 @@ class EdgewiseEnergySum(GraphModuleMixin, torch.nn.Module):
 
         self._factor = None
         if normalize_edge_energy_sum and avg_num_neighbors is not None:
-            self._factor = 1.0 / math.sqrt(avg_num_neighbors)
+            # factor of 2 to normalize dE/dr_i which includes both contributions from dE/dr_ij and every other derivative against r_ji
+            self._factor = 1.0 / math.sqrt(2 * avg_num_neighbors)
 
     def forward(self, data: AtomicDataDict.Type) -> AtomicDataDict.Type:
         edge_center = data[AtomicDataDict.EDGE_INDEX_KEY][0]
