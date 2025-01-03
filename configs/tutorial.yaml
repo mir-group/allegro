@@ -91,7 +91,7 @@ training_module:
       two_body_embedding_dim: 32
       two_body_mlp_hidden_layer_depth: 2
       two_body_mlp_hidden_layer_width: 64
-      two_body_mlp_nonlinear: true
+      two_body_mlp_nonlinearity: silu
 
       # one could also use the spline embedding module with less hyperparameters
       #_target_: allegro.nn.TwoBodySplineScalarEmbed
@@ -116,12 +116,12 @@ training_module:
 
     allegro_mlp_hidden_layer_depth: 2
     allegro_mlp_hidden_layer_width: 128
-    allegro_mlp_nonlinear: true
+    allegro_mlp_nonlinearity: silu
 
     # == readout ==
     readout_mlp_hidden_layer_depth: 1
     readout_mlp_hidden_layer_width: 32
-    readout_mlp_nonlinear: true
+    readout_mlp_nonlinearity: null
 
     # average number of neighbors for edge sum normalization
     avg_num_neighbors: ${training_data_stats:num_neighbors_mean}
