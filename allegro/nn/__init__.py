@@ -1,5 +1,5 @@
 from ._allegro import Allegro_Module
-from ._edgewise import EdgewiseEnergySum, EdgewiseReduce
+from ._edgewise import EdgewiseReduce
 from ._fc import ScalarMLP, ScalarMLPFunction
 from ._edgeembed import ProductTypeEmbedding
 from .scalarembed import TwoBodyBesselScalarEmbed, TwoBodySplineScalarEmbed
@@ -8,7 +8,6 @@ from ._misc import ScalarMultiply
 
 __all__ = [
     Allegro_Module,
-    EdgewiseEnergySum,
     EdgewiseReduce,
     ScalarMLP,
     ScalarMLPFunction,

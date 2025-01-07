@@ -1,10 +1,10 @@
-from typing import Optional
 import math
-
 import torch
 
 from nequip.data import AtomicDataDict
 from nequip.nn import GraphModuleMixin, scatter
+
+from typing import Optional
 
 
 class EdgewiseReduce(GraphModuleMixin, torch.nn.Module):
@@ -21,7 +21,6 @@ class EdgewiseReduce(GraphModuleMixin, torch.nn.Module):
         reduce="sum",
         irreps_in={},
     ):
-        """Sum edges into nodes."""
         super().__init__()
         assert reduce in ("sum", "mean", "min", "max")
         self.reduce = reduce
@@ -37,71 +36,27 @@ class EdgewiseReduce(GraphModuleMixin, torch.nn.Module):
         )
         self._factor = None
         if normalize_edge_reduce and avg_num_neighbors is not None:
-            self._factor = 1.0 / math.sqrt(avg_num_neighbors)
+            # factor of 2 to normalize dE/dr_i which includes both contributions from dE/dr_ij and every other derivative against r_ji
+            self._factor = 1.0 / math.sqrt(2 * avg_num_neighbors)
 
     def forward(self, data: AtomicDataDict.Type) -> AtomicDataDict.Type:
         # get destination nodes 🚂
         edge_dst = data[AtomicDataDict.EDGE_INDEX_KEY][0]
+        edge_data = data[self.field]
 
+        # === scale ===
+        # for numerics it seems safer to make these smaller first before accumulating
+        factor: Optional[float] = self._factor  # torchscript hack for typing
+        if factor is not None:
+            edge_data = edge_data * factor
+
+        # === scatter ===
         out = scatter(
-            data[self.field],
+            edge_data,
             edge_dst,
             dim=0,
             dim_size=AtomicDataDict.num_nodes(data),
             reduce=self.reduce,
         )
-
-        factor: Optional[float] = self._factor  # torchscript hack for typing
-        if factor is not None:
-            out = out * factor
-
         data[self.out_field] = out
-
-        return data
-
-
-class EdgewiseEnergySum(GraphModuleMixin, torch.nn.Module):
-    """Sum edgewise energies.
-
-    Includes optional per-species-pair edgewise energy scales.
-    """
-
-    _factor: Optional[float]
-
-    def __init__(
-        self,
-        avg_num_neighbors: Optional[float] = None,
-        normalize_edge_energy_sum: bool = True,
-        irreps_in={},
-    ):
-        """Sum edges into nodes."""
-        super().__init__()
-        self._init_irreps(
-            irreps_in=irreps_in,
-            my_irreps_in={AtomicDataDict.EDGE_ENERGY_KEY: "0e"},
-            irreps_out={AtomicDataDict.PER_ATOM_ENERGY_KEY: "0e"},
-        )
-
-        self._factor = None
-        if normalize_edge_energy_sum and avg_num_neighbors is not None:
-            # factor of 2 to normalize dE/dr_i which includes both contributions from dE/dr_ij and every other derivative against r_ji
-            self._factor = 1.0 / math.sqrt(2 * avg_num_neighbors)
-
-    def forward(self, data: AtomicDataDict.Type) -> AtomicDataDict.Type:
-        edge_center = data[AtomicDataDict.EDGE_INDEX_KEY][0]
-        edge_eng = data[AtomicDataDict.EDGE_ENERGY_KEY]
-
-        # for numerics it seems safer to make these smaller first before accumulating
-        factor: Optional[float] = self._factor  # torchscript hack for typing
-        if factor is not None:
-            edge_eng = edge_eng * factor
-        atom_eng = scatter(
-            edge_eng,
-            edge_center,
-            dim=0,
-            dim_size=AtomicDataDict.num_nodes(data),
-        )
-
-        data[AtomicDataDict.PER_ATOM_ENERGY_KEY] = atom_eng
-
         return data
