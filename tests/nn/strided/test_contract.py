@@ -64,9 +64,7 @@ def test_contract(
             args = args[:-1]
         return c_opt_mod(*args)
 
-    batchdim = 7
-    # scatter_dim = torch.tensor([2], dtype=torch.long)
-    # scatter_idxs = torch.randint(0, high=scatter_dim, size=(batchdim,))
+    batchdim = 17
     scatter_dim = torch.tensor([batchdim], dtype=torch.long)
     scatter_idxs = torch.arange(batchdim)
     args_in = (
@@ -155,7 +153,7 @@ def test_like_tp(
         instructions=instr,
         connection_mode=mode,
     )
-    batchdim = 7
+    batchdim = 17
     scatter_dim = torch.tensor([batchdim], dtype=torch.long)
     scatter_idxs = torch.arange(batchdim)
     args_in = (
