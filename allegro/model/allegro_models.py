@@ -16,7 +16,7 @@ from nequip.nn.embedding import (
 )
 from allegro.nn import (
     TwoBodySphericalHarmonicTensorEmbed,
-    EdgewiseEnergySum,
+    EdgewiseReduce,
     Allegro_Module,
     ScalarMLP,
 )
@@ -71,6 +71,7 @@ def AllegroModel(**kwargs):
         allegro_mlp_hidden_layer_depth (int): number of layers in MLPs used at each Allegro layer
         allegro_mlp_hidden_layer_width (int): number of neurons per layer in MLPs used at each Allegro layer
         allegro_mlp_nonlinearity (str): ``silu``, ``mish``, ``gelu``, or ``None`` (default ``silu``)
+        node_readout (bool): whether the readout is applied on node features or edge features [note that both options are equivalent if the readout MLP is linear] (default ``False``)
         readout_mlp_hidden_layer_depth (int): number of layers in the readout MLP
         readout_mlp_hidden_layer_width (int): number of neurons per layer in the readout MLP
         readout_mlp_nonlinearity (str): ``silu``, ``mish``, ``gelu``, or ``None`` (default ``None``)
@@ -102,6 +103,7 @@ def FullAllegroEnergyModel(
     allegro_mlp_hidden_layer_width: int = 64,
     allegro_mlp_nonlinearity: Optional[str] = "silu",
     # readout
+    node_readout: bool = False,
     readout_mlp_hidden_layer_depth: int = 2,
     readout_mlp_hidden_layer_width: int = 32,
     readout_mlp_nonlinearity: Optional[str] = None,
@@ -171,22 +173,62 @@ def FullAllegroEnergyModel(
         irreps_in=tensor_embed.irreps_out,
     )
 
-    # === allegro readout ===
-    readout = ScalarMLP(
-        mlp_output_dim=1,
-        mlp_hidden_layer_depth=readout_mlp_hidden_layer_depth,
-        mlp_hidden_layer_width=readout_mlp_hidden_layer_width,
-        mlp_nonlinearity=readout_mlp_nonlinearity,
-        field=AtomicDataDict.EDGE_FEATURES_KEY,
-        out_field=AtomicDataDict.EDGE_ENERGY_KEY,
-        irreps_in=allegro.irreps_out,
-    )
+    modules = {
+        "edge_norm": edge_norm,
+        "scalar_embed": scalar_embed_module,
+        "tensor_embed": tensor_embed,
+        "allegro": allegro,
+    }
 
-    # === edge -> atom ===
-    edge_eng_sum = EdgewiseEnergySum(
-        avg_num_neighbors=avg_num_neighbors,
-        irreps_in=readout.irreps_out,
-    )
+    # === allegro readout ===
+    if node_readout:
+        edge_scatter = EdgewiseReduce(
+            field=AtomicDataDict.EDGE_FEATURES_KEY,
+            out_field=AtomicDataDict.NODE_FEATURES_KEY,
+            normalize_edge_reduce=True,
+            avg_num_neighbors=avg_num_neighbors,
+            irreps_in=allegro.irreps_out,
+        )
+        node_readout = ScalarMLP(
+            mlp_output_dim=1,
+            mlp_hidden_layer_depth=readout_mlp_hidden_layer_depth,
+            mlp_hidden_layer_width=readout_mlp_hidden_layer_width,
+            mlp_nonlinearity=readout_mlp_nonlinearity,
+            field=AtomicDataDict.NODE_FEATURES_KEY,
+            out_field=AtomicDataDict.PER_ATOM_ENERGY_KEY,
+            irreps_in=edge_scatter.irreps_out,
+        )
+        readout_irreps_out = node_readout.irreps_out
+        modules.update(
+            {
+                "edge_scatter": edge_scatter,
+                "node_readout": node_readout,
+            }
+        )
+    else:
+        edge_readout = ScalarMLP(
+            mlp_output_dim=1,
+            mlp_hidden_layer_depth=readout_mlp_hidden_layer_depth,
+            mlp_hidden_layer_width=readout_mlp_hidden_layer_width,
+            mlp_nonlinearity=readout_mlp_nonlinearity,
+            field=AtomicDataDict.EDGE_FEATURES_KEY,
+            out_field=AtomicDataDict.EDGE_ENERGY_KEY,
+            irreps_in=allegro.irreps_out,
+        )
+        edge_eng_sum = EdgewiseReduce(
+            field=AtomicDataDict.EDGE_ENERGY_KEY,
+            out_field=AtomicDataDict.PER_ATOM_ENERGY_KEY,
+            normalize_edge_reduce=True,
+            avg_num_neighbors=avg_num_neighbors,
+            irreps_in=edge_readout.irreps_out,
+        )
+        readout_irreps_out = edge_eng_sum.irreps_out
+        modules.update(
+            {
+                "edge_readout": edge_readout,
+                "edge_eng_sum": edge_eng_sum,
+            }
+        )
 
     # === per type scale shift ===
     per_type_energy_scale_shift = PerTypeScaleShift(
@@ -197,18 +239,10 @@ def FullAllegroEnergyModel(
         shifts=per_type_energy_shifts,
         scales_trainable=per_type_energy_scales_trainable,
         shifts_trainable=per_type_energy_shifts_trainable,
-        irreps_in=edge_eng_sum.irreps_out,
+        irreps_in=readout_irreps_out,
     )
 
-    modules = {
-        "edge_norm": edge_norm,
-        "scalar_embed": scalar_embed_module,
-        "tensor_embed": tensor_embed,
-        "allegro": allegro,
-        "readout": readout,
-        "edge_eng_sum": edge_eng_sum,
-        "per_type_energy_scale_shift": per_type_energy_scale_shift,
-    }
+    modules.update({"per_type_energy_scale_shift": per_type_energy_scale_shift})
 
     # === pair potentials ===
     prev_irreps_out = per_type_energy_scale_shift.irreps_out
