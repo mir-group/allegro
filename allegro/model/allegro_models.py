@@ -65,6 +65,7 @@ def AllegroModel(**kwargs):
         l_max (int): maximum order l to use in spherical harmonics embedding, 1 is baseline (fast), 2 is more accurate, but slower, 3 highly accurate but slow
         parity_setting (str): parity symmetry equivariance setting -- options are ``o3_full``, ``o3_restricted``, ``so3``
         scalar_embed: an Allegro-compatible two-body scalar embedding module, e.g. ``allegro.nn.TwoBodyBesselScalarEmbed``
+        scalar_embed_output_dim (int): output dimension of the scalar embedding module (default ``None`` will use ``num_scalar_features``)
         num_layers (int): number of Allegro layers
         num_scalar_features (int): multiplicity of scalar features in the Allegro layers
         num_tensor_features (int): multiplicity of tensor features in the Allegro layers
@@ -94,6 +95,7 @@ def FullAllegroEnergyModel(
     tensor_track_allowed_irreps: Union[str, o3.Irreps],
     # scalar embed
     scalar_embed: Dict,
+    scalar_embed_output_dim: Optional[int] = None,
     per_edge_type_cutoff: Optional[Dict[str, Union[float, Dict[str, float]]]] = None,
     # allegro layers
     num_layers: int = 2,
@@ -130,7 +132,11 @@ def FullAllegroEnergyModel(
     scalar_embed_module = instantiate(
         scalar_embed,
         type_names=type_names,
-        module_output_dim=num_scalar_features,
+        module_output_dim=(
+            num_scalar_features
+            if scalar_embed_output_dim is None
+            else scalar_embed_output_dim
+        ),
         scalar_embed_field=AtomicDataDict.EDGE_EMBEDDING_KEY,
         irreps_in=edge_norm.irreps_out,
     )

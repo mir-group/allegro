@@ -94,9 +94,13 @@ training_module:
       two_body_mlp_nonlinearity: silu
 
       # one could also use the spline embedding module with less hyperparameters
-      #_target_: allegro.nn.TwoBodySplineScalarEmbed
-      #spline_grid: 5
-      #spline_span: 3
+      # _target_: allegro.nn.TwoBodySplineScalarEmbed
+      # spline_grid: 5
+      # spline_span: 3
+
+    # one could explicitly specify the initial scalar embedding's output dimension
+    # if `scalar_embed_output_dim` is not provided (or `null`), Allegro will use `num_scalar_features` in its place
+    # scalar_embed_output_dim: 256
 
     # == symmetry ==
     # maximum order l to use in spherical harmonics embedding, 1 is baseline (fast), 2 is more accurate, but slower, 3 highly accurate but slow
@@ -109,23 +113,29 @@ training_module:
     # number of tensor product layers, 1-3 usually best, more is more accurate but slower
     num_layers: 2
     
+    # number of scalar features, more is more accurate but slower
+    # powers of two (4, 8, 16, 64, 128, 256, 512, ...) are good options to try depending on data set
     num_scalar_features: 64
     
-    # number of tensor features, more is more accurate but slower, 1, 4, 8, 16, 64, 128 are good options to try depending on data set
+    # number of tensor features, more is more accurate but slower
+    # powers of two (4, 8, 16, 64, 128, ...) are good options to try depending on data set
     num_tensor_features: 32
 
+    # neural network parameters in the Allegro layers
     allegro_mlp_hidden_layer_depth: 2
     allegro_mlp_hidden_layer_width: 128
     allegro_mlp_nonlinearity: silu
 
     # == readout ==
+    # neural network parameters in the readout layer
     readout_mlp_hidden_layer_depth: 1
     readout_mlp_hidden_layer_width: 32
     readout_mlp_nonlinearity: null
+    # ^ setting `nonlinearity` to `null` means that output MLP is effectively a linear layer
 
     # average number of neighbors for edge sum normalization
     avg_num_neighbors: ${training_data_stats:num_neighbors_mean}
-    
+
     # == per-type per-atom scales and shifts ==
     per_type_energy_shifts: ${training_data_stats:per_atom_energy_mean}
     per_type_energy_scales: ${training_data_stats:per_type_forces_rms}
