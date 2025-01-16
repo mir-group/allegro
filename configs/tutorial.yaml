@@ -23,6 +23,7 @@ data:
   test_dataloader_kwargs: ${data.val_dataloader_kwargs}
   stats_manager:
     _target_: nequip.data.DataStatisticsManager
+    type_names: ${model_type_names}
     metrics:
       - field:
           _target_: nequip.data.NumNeighbors
