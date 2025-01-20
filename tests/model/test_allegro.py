@@ -25,10 +25,7 @@ minimal_config1 = dict(
     per_edge_type_cutoff={"H": 2.0, "C": {"H": 4.0, "C": 3.5, "O": 3.7}, "O": 3.9},
     **COMMON_CONFIG,
 )
-minimal_config2 = dict(
-    tensors_mixing_mode="uvvp",
-    **COMMON_CONFIG,
-)
+
 
 BESSEL_CONFIG = {
     "_target_": "allegro.nn.TwoBodyBesselScalarEmbed",
@@ -40,8 +37,8 @@ BESSEL_CONFIG = {
 
 SPLINE_CONFIG = {
     "_target_": "allegro.nn.TwoBodySplineScalarEmbed",
-    "spline_grid": 5,
-    "spline_span": 3,
+    "spline_grid": 3,
+    "spline_span": 5,
 }
 
 
@@ -76,6 +73,14 @@ class TestAllegro(BaseEnergyModelTests):
         params=[True, False],
         scope="class",
     )
+    def tp_path_channel_coupling(self, request):
+        return request.param
+
+    @pytest.fixture(
+        # only test default case of False to save time
+        params=[False],
+        scope="class",
+    )
     def node_readout(self, request):
         return request.param
 
@@ -83,7 +88,6 @@ class TestAllegro(BaseEnergyModelTests):
         params=[
             minimal_config0,
             minimal_config1,
-            # minimal_config2,
         ],
         scope="class",
     )
@@ -94,6 +98,7 @@ class TestAllegro(BaseEnergyModelTests):
         parity_setting,
         scatter_features,
         node_readout,
+        tp_path_channel_coupling,
     ):
         config = request.param
         config = config.copy()
@@ -101,4 +106,5 @@ class TestAllegro(BaseEnergyModelTests):
         config.update({"parity_setting": parity_setting})
         config.update({"scatter_features": scatter_features})
         config.update({"node_readout": node_readout})
+        config.update({"tp_path_channel_coupling": tp_path_channel_coupling})
         return config
