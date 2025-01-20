@@ -1,77 +1,93 @@
-from typing import List, Tuple, Optional
-from math import sqrt
-
+import math
 import torch
-
 from e3nn import o3
-from e3nn.util import prod
-
 from nequip.nn import scatter
-from ._layout import StridedLayout
-from .._misc import _init_weight
+from typing import List, Tuple, Optional
 
 
 class Contracter(torch.nn.Module):
+    """Contracter for strided tensor product.
+
+    Args:
+        irreps_in1: input irreps for LHS
+        irreps_in2: input irreps for RHS
+        irreps_out: output irreps
+        instructions: list of tuples of ints, each tuple specifies the input
+            irreps to contract together and the output irrep to put them in.
+            If None, all possible paths among the inputs leading to all outputs
+            will be computed.
+        path_channel_coupling: whether the weights provide path-channel couplings
+    """
+
     _weight_w3j_einstr: str
     _contract_einstr: str
-    mul1: int
-    mul2: int
-    mulout: int
+    mul: int
     base_dim1: int
     base_dim2: int
     base_dim_out: int
-    weight_numel: int
+    num_paths: int
 
     def __init__(
         self,
         irreps_in1,
         irreps_in2,
         irreps_out,
-        instructions: List[Tuple[int, int, int]],
-        connection_mode: str,
-        initialization: str = "uniform",
-        normalization: str = "component",
+        mul: int,
+        instructions: Optional[List[Tuple[int, int, int]]] = None,
+        path_channel_coupling: bool = False,  # i.e. "p" vs "uuup" mode
         scatter_factor: Optional[float] = None,
     ):
         super().__init__()
+
+        # optional scatter factor (for fused scatter + index_select)
         self.scatter_factor = scatter_factor
 
+        # -- Instruction management --
+        if instructions is None:
+            instructions = []
+            for i_out, (_, ir_out) in enumerate(irreps_out):
+                for i_1, (_, ir_1) in enumerate(irreps_in1):
+                    for i_2, (_, ir_2) in enumerate(irreps_in2):
+                        if ir_out in ir_1 * ir_2:
+                            instructions.append((i_1, i_2, i_out))
+
         # -- Irrep management --
-        irreps_in1 = o3.Irreps(irreps_in1)
-        assert all(mul == irreps_in1[0].mul for mul, ir in irreps_in1)
-        irreps_in2 = o3.Irreps(irreps_in2)
-        assert all(mul == irreps_in2[0].mul for mul, ir in irreps_in2)
-        irreps_out = o3.Irreps(irreps_out)
-        assert all(mul == irreps_out[0].mul for mul, ir in irreps_out)
-        layout_in1 = StridedLayout(irreps_in1)
-        layout_in2 = StridedLayout(irreps_in2)
-        layout_out = StridedLayout(irreps_out)
-        self.mul1, self.base_dim1 = layout_in1.mul, layout_in1.base_dim
-        self.mul2, self.base_dim2 = layout_in2.mul, layout_in2.base_dim
-        self.mulout, self.base_dimout = layout_out.mul, layout_out.base_dim
-        num_paths: int = len(instructions)
+        assert mul > 0
+        self.irreps_in1 = o3.Irreps(irreps_in1)
+        base_irreps1 = o3.Irreps((1, ir) for _, ir in self.irreps_in1)
+        dim1 = base_irreps1.dim
+        assert all(m == 1 for m, ir in self.irreps_in1)
+        self.irreps_in2 = o3.Irreps(irreps_in2)
+        base_irreps2 = o3.Irreps((1, ir) for _, ir in self.irreps_in2)
+        dim2 = base_irreps2.dim
+        assert all(m == 1 for m, ir in irreps_in2)
+        self.irreps_out = o3.Irreps(irreps_out)
+        base_irreps_out = o3.Irreps((1, ir) for _, ir in self.irreps_out)
+        dimout = base_irreps_out.dim
+        assert all(m == 1 for m, ir in self.irreps_out)
+        self.base_dim1 = dim1
+        self.base_dim2 = dim2
+        self.base_dim_out = dimout
+        self.mul = mul
+        self.num_paths: int = len(instructions)
+        assert self.num_paths > 0, "No TP paths available"
 
         # -- Make the w3j --
-        w3j_index = []
-        w3j_values = []
+        # list of tensors of shape [N, 3] containing i,j,k indexes
+        w3j_index: List[torch.Tensor] = []
+        # list of tensors of shape [N] containing w3j values
+        w3j_values: List[torch.Tensor] = []
 
         for ins_i, ins in enumerate(instructions):
-            mul_ir_in1 = layout_in1.base_irreps[ins[0]]
-            mul_ir_in2 = layout_in2.base_irreps[ins[1]]
-            mul_ir_out = layout_out.base_irreps[ins[2]]
+            ir_in1 = base_irreps1[ins[0]].ir
+            ir_in2 = base_irreps2[ins[1]].ir
+            ir_out = base_irreps_out[ins[2]].ir
 
-            # Check instruction against the symmetric selection rules
-            assert mul_ir_in1.ir.p * mul_ir_in2.ir.p == mul_ir_out.ir.p
-            assert (
-                abs(mul_ir_in1.ir.l - mul_ir_in2.ir.l)
-                <= mul_ir_out.ir.l
-                <= mul_ir_in1.ir.l + mul_ir_in2.ir.l
-            )
+            # Check instruction against the O3 selection rules
+            assert ir_in1.p * ir_in2.p == ir_out.p
+            assert abs(ir_in1.l - ir_in2.l) <= ir_out.l <= ir_in1.l + ir_in2.l
 
-            if mul_ir_in1.dim == 0 or mul_ir_in2.dim == 0 or mul_ir_out.dim == 0:
-                raise ValueError
-
-            this_w3j = o3.wigner_3j(mul_ir_in1.ir.l, mul_ir_in2.ir.l, mul_ir_out.ir.l)
+            this_w3j = o3.wigner_3j(ir_in1.l, ir_in2.l, ir_out.l)
             this_w3j_index = this_w3j.nonzero()
             w3j_values.append(
                 this_w3j[
@@ -80,133 +96,87 @@ class Contracter(torch.nn.Module):
             )
 
             # Normalize the path through multiplying normalization constant with w3j
-            if normalization == "component":
-                w3j_norm_term = 2 * mul_ir_out.ir.l + 1
-            elif normalization == "norm":
-                w3j_norm_term = (2 * mul_ir_in1.ir.l + 1) * (2 * mul_ir_in2.ir.l + 1)
-            else:
-                raise ValueError
-            alpha = sqrt(
-                w3j_norm_term
-                # Channel-mixing sum normalization term:
-                / sum(
-                    {
-                        "uvw": (layout_in1.mul * layout_in2.mul),
-                        "uvu": layout_in2.mul,
-                        "uvv": layout_in1.mul,
-                        "uuw": layout_in1.mul,
-                        "uuu": 1,
-                        "uvuv": 1,
-                        # p means just to weight paths, so no change to normalization per-path
-                        "p": 1,
-                    }[connection_mode]
-                    for i in instructions
-                    if i[2] == ins[2]
-                )
-            )
-            w3j_values[-1].mul_(alpha)
+            # "component" normalization
+            # TODO what is the correct backwards normalization here?
+            w3j_norm_term = math.sqrt(2 * ir_out.l + 1)
+            w3j_values[-1].mul_(w3j_norm_term)
 
-            this_w3j_index[:, 0] += layout_in1.base_irreps[: ins[0]].dim
-            this_w3j_index[:, 1] += layout_in2.base_irreps[: ins[1]].dim
-            this_w3j_index[:, 2] += layout_out.base_irreps[: ins[2]].dim
-            # Now need to flatten the index to be for [pk][ij]
-            w3j_index.append(
-                torch.cat(
-                    (
-                        ins_i * layout_out.base_dim  # unweighted all go in first path
-                        + this_w3j_index[:, 2].unsqueeze(-1),
-                        this_w3j_index[:, 0].unsqueeze(-1) * layout_in2.base_dim
-                        + this_w3j_index[:, 1].unsqueeze(-1),
-                    ),
-                    dim=1,
-                )
-            )
-        del mul_ir_in1, mul_ir_in2, mul_ir_out, w3j_norm_term, this_w3j, this_w3j_index
+            this_w3j_index[:, 0] += base_irreps1[: ins[0]].dim
+            this_w3j_index[:, 1] += base_irreps2[: ins[1]].dim
+            this_w3j_index[:, 2] += base_irreps_out[: ins[2]].dim
+            w3j_index.append(this_w3j_index)
 
-        w3j = torch.sparse_coo_tensor(
-            indices=torch.cat(w3j_index, dim=0).t(),
-            values=torch.cat(w3j_values, dim=0),
-            size=(
-                num_paths * layout_out.base_dim,
-                layout_in1.base_dim * layout_in2.base_dim,
-            ),
-        ).coalesce()
+            del ir_in1, ir_in2, ir_out, w3j_norm_term, this_w3j, this_w3j_index
 
-        # w3j is k,i,j, so this is whether, for nonzero entries,
-        # the i index is always equal to the j index. If so, then
-        # it is diagonal and we can eliminate the j dimension
+        # for every path, all i indexes are equal to all j indexes?
+        # since these are coordinates of non-zero entries, if all nonzero entries
+        # have i == j, then the matrix is diagonal
+        # since we'll sum over the paths, if every path is diagonal, then the sum is diagonal
+        w3j_is_ij_diagonal: bool = (base_irreps1.dim == base_irreps2.dim) and all(
+            torch.all(e[:, 0] == e[:, 1]) for e in w3j_index
+        )
         # in this case we are only taking diagonal (i == j)
         # entries from the outer product; but those values are just
         # the direct multiplication of the two tensors, eliminating
-        # the need for the outer product.
-        # obviously this only makes sense if they have the same size as well
-        # this is more or less a test of whether this TP is an inner product
-        w3j_i_indexes = torch.div(
-            w3j.indices()[1], layout_in1.base_dim, rounding_mode="floor"
-        )
-        w3j_j_indexes = w3j.indices()[1] % layout_in1.base_dim
-        w3j_is_ij_diagonal: bool = (
-            layout_in1.base_dim == layout_in2.base_dim
-        ) and torch.all(w3j_i_indexes == w3j_j_indexes)
-        if w3j_is_ij_diagonal:
-            # change the w3j to eliminate the dimension
-            # now its just k,i
-            w3j = torch.sparse_coo_tensor(
-                indices=torch.stack((w3j.indices()[0], w3j_i_indexes)),
-                values=w3j.values(),
-                size=(
-                    num_paths * layout_out.base_dim,
-                    layout_in1.base_dim,
-                ),
-            )
+        # the need for computing the full outer product.
 
-        # in dense, must shape it for einsum:
         if w3j_is_ij_diagonal:
-            kij_shape = (
-                layout_out.base_dim,
-                layout_in1.base_dim,
-            )
+            # i k p
+            w3j = torch.zeros(base_irreps1.dim, base_irreps_out.dim, self.num_paths)
+            for path_index, (path_w3j_indexes, path_w3j_values) in enumerate(
+                zip(w3j_index, w3j_values)
+            ):
+                w3j[
+                    path_w3j_indexes[:, 0],  # i
+                    path_w3j_indexes[:, 2],  # k
+                    path_index,  # p
+                ] = path_w3j_values
         else:
-            kij_shape = (
-                layout_out.base_dim,
-                layout_in1.base_dim,
-                layout_in2.base_dim,
+            # i j k p
+            w3j = torch.zeros(
+                base_irreps1.dim, base_irreps2.dim, base_irreps_out.dim, self.num_paths
             )
-        w3j = (
-            w3j.to_dense()
-            .reshape(((num_paths,) if num_paths > 1 else tuple()) + kij_shape)
-            .contiguous()
-        )
-        del kij_shape
+            for path_index, (path_w3j_indexes, path_w3j_values) in enumerate(
+                zip(w3j_index, w3j_values)
+            ):
+                w3j[
+                    path_w3j_indexes[:, 0],  # i
+                    path_w3j_indexes[:, 1],  # j
+                    path_w3j_indexes[:, 2],  # k
+                    path_index,  # p
+                ] = path_w3j_values
+
+        # remove path dims of w3j if there's only one path
+        if self.num_paths == 1:
+            w3j = w3j.squeeze(dim=-1)
         self.register_buffer("w3j", w3j)
 
-        # -- Make the channel mixing weights --
-        u, v, w = "uuu" if connection_mode == "p" else connection_mode
-        weight_label = {"uvw": "uvw", "uuu": "u", "uvv": "uv", "p": ""}[connection_mode]
-
-        weight_shape = {
-            "uvw": (layout_in1.mul, layout_in2.mul, layout_out.mul),
-            "uuu": (layout_in1.mul,),
-            "uvv": (layout_in1.mul, layout_in2.mul),
-            "p": tuple(),
-        }[connection_mode]
-        if connection_mode == "p":
-            assert num_paths > 1
-        if num_paths > 1:
-            # ^ if there's only one weighted path, the einsum simplifies without the p dimension
+        # -- Make the path mixing weights --
+        # "p" mode (p,) weights vs "uuup" mode (u,p) weights
+        if path_channel_coupling:
+            weight_label = "u"
+            weight_shape = (self.mul,)
+        else:
+            weight_label = ""
+            weight_shape = tuple()
+        if self.num_paths > 1:
+            # either "p" or "up"
             weight_label = weight_label + "p"
-            weight_shape = weight_shape + (num_paths,)
-
-        self.weight_numel = abs(prod(weight_shape))
+            weight_shape = weight_shape + (self.num_paths,)
         self.weights = torch.nn.Parameter(torch.randn(weight_shape))
-        _init_weight(self.weights, initialization=initialization)
+        with torch.no_grad():
+            init_range = (
+                math.sqrt(3 / self.mul) if path_channel_coupling else math.sqrt(3)
+            )
+            self.weights.uniform_(-init_range, init_range)
+            del init_range
 
         # -- Prepare the einstrings --
         j = "i" if w3j_is_ij_diagonal else "j"
         ij = "i" if w3j_is_ij_diagonal else "ij"
-        p = "p" if num_paths > 1 else ""
+        p = "p" if self.num_paths > 1 else ""
         self._weight_w3j_einstr = (
-            f"{weight_label},{p}k{ij}->{weight_label.rstrip('p')}k{ij}"
+            f"{ij}k{p},{weight_label}->{weight_label.rstrip('p')}{ij}k"
         )
         # note that PyTorch appears to contract left-to-right by default in C++
         # (which is all we get for the TorchScript backend, the default opt_einsum
@@ -214,10 +184,9 @@ class Contracter(torch.nn.Module):
         # https://github.com/pytorch/pytorch/blob/ad39a2fc462fd14ad5442d2f21eed1d2c34a20eb/aten/src/ATen/native/Linear.cpp#L551-L552
         # We arange the einstr to do in order:
         #  zui,zuj->zuij (outer product)
-        #  zuij,ijk->zuk  (matmul)
-        uv = u if u == v else f"{u}{v}"
-        self._outer_einstr = f"z{u}i,z{v}{j}->z{uv}{ij}"
-        self._matmul_einstr = f"z{uv}{ij},{weight_label.rstrip('p')}k{ij}->z{w}k"
+        #  zuij,(u)ijk->zuk  (matmul)
+        self._outer_einstr = f"zui,zu{j}->zu{ij}"
+        self._matmul_einstr = f"zu{ij},{weight_label.rstrip('p')}{ij}k->zuk"
 
     def forward(
         self,
@@ -226,7 +195,7 @@ class Contracter(torch.nn.Module):
         idxs: torch.Tensor,
         scatter_dim_size: int,
     ) -> torch.Tensor:
-
+        # === optional scatter + index_select ===
         # normalize if normalization provided
         if self.scatter_factor is not None:
             x2 = self.scatter_factor * x2
@@ -239,14 +208,18 @@ class Contracter(torch.nn.Module):
         )
         x2 = torch.index_select(x2_scatter, 0, idxs)
 
+        # === perform TP ===
         # convert to strided shape
-        x1 = x1.reshape(-1, self.mul1, self.base_dim1)
-        x2 = x2.reshape(-1, self.mul2, self.base_dim2)
+        x1 = x1.reshape(-1, self.mul, self.base_dim1)
+        x2 = x2.reshape(-1, self.mul, self.base_dim2)
         # for shared weights, we can precontract weights and w3j so they can be frozen together
         # this is usually advantageous for inference, since the weights would have to be
         # multiplied in anyway at some point
-        ww3j = torch.einsum(self._weight_w3j_einstr, self.weights, self.w3j)
+        ww3j = torch.einsum(self._weight_w3j_einstr, self.w3j, self.weights)
         # now do the TP with the pre-contracted w3j
         outer = torch.einsum(self._outer_einstr, x1, x2)
         out = torch.einsum(self._matmul_einstr, outer, ww3j)
         return out
+
+    def extra_repr(self):
+        return f"{self.irreps_in1} x {self.irreps_in2} -> {self.irreps_out} | {self.mul} channels | {self.num_paths} paths"
