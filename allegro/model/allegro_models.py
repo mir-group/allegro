@@ -112,8 +112,7 @@ def FullAllegroEnergyModel(
     # edge sum normalization
     avg_num_neighbors: Optional[float] = None,
     # allegro layers defaults
-    tensors_mixing_mode: str = "p",
-    tensor_track_weight_init: str = "uniform",
+    tp_path_channel_coupling: bool = False,
     weight_individual_irreps: bool = True,
     scatter_features: bool = False,
     # per atom energy params
@@ -166,9 +165,8 @@ def FullAllegroEnergyModel(
             "mlp_hidden_layer_width": allegro_mlp_hidden_layer_width,
             "mlp_nonlinearity": allegro_mlp_nonlinearity,
         },
+        tp_path_channel_coupling=tp_path_channel_coupling,
         # best to use defaults for these
-        tensors_mixing_mode=tensors_mixing_mode,
-        tensor_track_weight_init=tensor_track_weight_init,
         weight_individual_irreps=weight_individual_irreps,
         scatter_features=scatter_features,
         # fields
