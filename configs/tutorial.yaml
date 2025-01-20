@@ -122,6 +122,10 @@ training_module:
     # powers of two (4, 8, 16, 64, 128, ...) are good options to try depending on data set
     num_tensor_features: 32
 
+    # whether the tensor product weights couple the paths and channels or not (otherwise the weights are only applied per-path)
+    # default is `false`, `true` may be useful for larger `l_max` and `num_layers` where there are more paths
+    tp_path_channel_coupling: false
+
     # neural network parameters in the Allegro layers
     allegro_mlp_hidden_layer_depth: 2
     allegro_mlp_hidden_layer_width: 128
