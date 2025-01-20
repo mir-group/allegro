@@ -27,8 +27,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         tensor_track_allowed_irreps: o3.Irreps,
         # optional hyperparameters:
         avg_num_neighbors: Optional[float] = None,
-        tensors_mixing_mode: str = "p",
-        tensor_track_weight_init: str = "uniform",
+        tp_path_channel_coupling: bool = False,  # "p" mode default (True is "uuup" mode)
         weight_individual_irreps: bool = True,
         scatter_features: bool = True,
         # ^ scatter V_ik, alternative is to scatter embedded environment w_ij Y_ij
@@ -61,15 +60,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         self.scatter_features = scatter_features
         self.tensor_track_allowed_irreps = o3.Irreps(tensor_track_allowed_irreps)
         assert set(mul for mul, ir in self.tensor_track_allowed_irreps) == {1}
-
-        # == tensor mixing mode ==
-        assert tensors_mixing_mode in ("uuup", "uvvp", "p")
-        tp_tensors_mixing_mode = {
-            "uuup": "uuu",
-            "uvvp": "uvv",
-            "p": "p",
-        }[tensors_mixing_mode]
-        internal_weight_tp = True
 
         # == bookkeeping parameters ==
         self.tensor_basis_in_field = tensor_basis_in_field
@@ -195,43 +185,24 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 irin1 = arg_irreps
                 irin2 = env_embed_irreps
 
-            tmp_i_out: int = 0
-            instr = []
             n_scalar_outs: int = 0
-            full_out_irreps = out_irreps if internal_weight_tp else []
             for i_out, (_, ir_out) in enumerate(out_irreps):
                 for i_1, (_, ir_1) in enumerate(irin1):
                     for i_2, (_, ir_2) in enumerate(irin2):
                         if ir_out in ir_1 * ir_2:
-                            if internal_weight_tp:
-                                if ir_out == SCALAR:
-                                    n_scalar_outs = 1
-                                instr.append((i_1, i_2, i_out))
-                            else:
-                                if ir_out == SCALAR:
-                                    n_scalar_outs += 1
-                                instr.append((i_1, i_2, tmp_i_out))
-                                full_out_irreps.append(
-                                    (self.num_tensor_features, ir_out)
-                                )
-                                tmp_i_out += 1
-            full_out_irreps = o3.Irreps(full_out_irreps)
-            del tmp_i_out
+                            if ir_out == SCALAR:
+                                n_scalar_outs = 1
+
+            full_out_irreps = o3.Irreps(out_irreps)
             self._n_scalar_outs.append(n_scalar_outs)
             assert all(ir == SCALAR for _, ir in full_out_irreps[:n_scalar_outs])
+            # note that we set the multiplicity as 1 because the strided layout is incompatible with e3nn's data format
             tp = Contracter(
-                irreps_in1=o3.Irreps(
-                    [(self.num_tensor_features, ir) for _, ir in irin1]
-                ),
-                irreps_in2=o3.Irreps(
-                    [(self.num_tensor_features, ir) for _, ir in irin2]
-                ),
-                irreps_out=o3.Irreps(
-                    [(self.num_tensor_features, ir) for _, ir in full_out_irreps]
-                ),
-                instructions=instr,
-                connection_mode=tp_tensors_mixing_mode,
-                initialization=tensor_track_weight_init,
+                irreps_in1=o3.Irreps([(1, ir) for _, ir in irin1]),
+                irreps_in2=o3.Irreps([(1, ir) for _, ir in irin2]),
+                irreps_out=o3.Irreps([(1, ir) for _, ir in full_out_irreps]),
+                mul=self.num_tensor_features,
+                path_channel_coupling=tp_path_channel_coupling,
                 scatter_factor=env_sum_constant,
             )
             self.tps.append(tp)
