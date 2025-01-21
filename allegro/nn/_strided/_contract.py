@@ -36,6 +36,7 @@ class Contracter(torch.nn.Module):
         instructions: Optional[List[Tuple[int, int, int]]] = None,
         path_channel_coupling: bool = False,  # i.e. "p" vs "uuup" mode
         scatter_factor: Optional[float] = None,
+        irrep_normalization: Optional[str] = None,
     ):
         super().__init__()
 
@@ -98,7 +99,14 @@ class Contracter(torch.nn.Module):
             # Normalize the path through multiplying normalization constant with w3j
             # "component" normalization
             # TODO what is the correct backwards normalization here?
-            w3j_norm_term = math.sqrt(2 * ir_out.l + 1)
+            if irrep_normalization is None:
+                w3j_norm_term = 1
+            elif irrep_normalization == "component":
+                w3j_norm_term = math.sqrt(2 * ir_out.l + 1)
+            else:
+                raise NotImplementedError(
+                    f"`{irrep_normalization}` `irrep_normalization` is not implemented"
+                )
             w3j_values[-1].mul_(w3j_norm_term)
 
             this_w3j_index[:, 0] += base_irreps1[: ins[0]].dim

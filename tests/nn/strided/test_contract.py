@@ -113,12 +113,14 @@ def _strided_to_cat(irreps, mul, x):
 @pytest.mark.parametrize("irreps_in2", ["0e", "0e + 0o + 1e + 1o", "2e + 4e + 2o"])
 @pytest.mark.parametrize("irreps_out", ["0e", "0e + 0o + 1e + 1o", "1e + 5o + 3o"])
 @pytest.mark.parametrize("mul", [3, 8])
+@pytest.mark.parametrize("irrep_normalization", [None, "component"])
 @pytest.mark.parametrize("dtype", ["float32", "float64"])
 def test_like_tp(
     irreps_in1,
     irreps_in2,
     irreps_out,
     mul,
+    irrep_normalization,
     dtype,
 ):
     """
@@ -144,6 +146,7 @@ def test_like_tp(
             mul=mul,
             instructions=instr,
             path_channel_coupling=True,
+            irrep_normalization=irrep_normalization,
         )
         print(c)
         # make input data
@@ -159,7 +162,9 @@ def test_like_tp(
             irreps_in2=o3.Irreps((mul, ir) for _, ir in irreps_in2),
             irreps_out=o3.Irreps((mul, ir) for _, ir in irreps_out),
             instructions=[ins + ("uuu", True, 1.0) for ins in instr],
-            irrep_normalization="none",
+            irrep_normalization=(
+                "none" if irrep_normalization is None else irrep_normalization
+            ),
             path_normalization="none",
             shared_weights=True,
             internal_weights=False,
