@@ -1,3 +1,4 @@
+import math
 from e3nn import o3
 
 from nequip.data import AtomicDataDict
@@ -7,6 +8,7 @@ from nequip.nn import (
     AtomwiseReduce,
     PerTypeScaleShift,
     ForceStressOutput,
+    ApplyFactor,
 )
 
 from nequip.nn.embedding import (
@@ -189,8 +191,6 @@ def FullAllegroEnergyModel(
         edge_scatter = EdgewiseReduce(
             field=AtomicDataDict.EDGE_FEATURES_KEY,
             out_field=AtomicDataDict.NODE_FEATURES_KEY,
-            normalize_edge_reduce=True,
-            avg_num_neighbors=avg_num_neighbors,
             irreps_in=allegro.irreps_out,
         )
         node_readout = ScalarMLP(
@@ -202,11 +202,18 @@ def FullAllegroEnergyModel(
             out_field=AtomicDataDict.PER_ATOM_ENERGY_KEY,
             irreps_in=edge_scatter.irreps_out,
         )
-        readout_irreps_out = node_readout.irreps_out
+        normalization = ApplyFactor(
+            in_field=AtomicDataDict.PER_ATOM_ENERGY_KEY,
+            factor=1.0 / math.sqrt(2 * avg_num_neighbors),
+            # ^ factor of 2 to normalize dE/dr_i which includes both contributions from dE/dr_ij and every other derivative against r_ji
+            irreps_in=node_readout.irreps_out,
+        )
+        readout_irreps_out = normalization.irreps_out
         modules.update(
             {
                 "edge_scatter": edge_scatter,
                 "node_readout": node_readout,
+                "normalization": normalization,
             }
         )
     else:
@@ -222,8 +229,8 @@ def FullAllegroEnergyModel(
         edge_eng_sum = EdgewiseReduce(
             field=AtomicDataDict.EDGE_ENERGY_KEY,
             out_field=AtomicDataDict.PER_ATOM_ENERGY_KEY,
-            normalize_edge_reduce=True,
-            avg_num_neighbors=avg_num_neighbors,
+            factor=1.0 / math.sqrt(2 * avg_num_neighbors),
+            # ^ factor of 2 to normalize dE/dr_i which includes both contributions from dE/dr_ij and every other derivative against r_ji
             irreps_in=edge_readout.irreps_out,
         )
         readout_irreps_out = edge_eng_sum.irreps_out

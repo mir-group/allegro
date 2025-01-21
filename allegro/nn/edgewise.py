@@ -1,4 +1,3 @@
-import math
 import torch
 
 from nequip.data import AtomicDataDict
@@ -16,8 +15,7 @@ class EdgewiseReduce(GraphModuleMixin, torch.nn.Module):
         self,
         field: str,
         out_field: Optional[str] = None,
-        normalize_edge_reduce: bool = True,
-        avg_num_neighbors: Optional[float] = None,
+        factor: Optional[float] = None,
         reduce="sum",
         irreps_in={},
     ):
@@ -35,9 +33,8 @@ class EdgewiseReduce(GraphModuleMixin, torch.nn.Module):
             ),
         )
         self._factor = None
-        if normalize_edge_reduce and avg_num_neighbors is not None:
-            # factor of 2 to normalize dE/dr_i which includes both contributions from dE/dr_ij and every other derivative against r_ji
-            self._factor = 1.0 / math.sqrt(2 * avg_num_neighbors)
+        if factor is not None:
+            self._factor = factor
 
     def forward(self, data: AtomicDataDict.Type) -> AtomicDataDict.Type:
         # get destination nodes 🚂
