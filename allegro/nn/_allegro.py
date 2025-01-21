@@ -77,15 +77,34 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             ],
         )
         scalar_input_dim: int = self.irreps_in[self.scalar_in_field].num_irreps
+        # contract: tensor basis input to Allegro module are spherical harmonics (or some tensor with 1 channel only)
+        input_irreps = self.irreps_in[self.tensor_basis_in_field]
+        assert all(mul == 1 for mul, ir in input_irreps)
 
+        # === env weighter ===
+        self._env_weighter = MakeWeightedChannels(
+            irreps_in=input_irreps,
+            multiplicity_out=self.num_tensor_features,
+            weight_individual_irreps=weight_individual_irreps,
+        )
+
+        # === first layer linear projection ===
+        # hardcode linear projection: twobody features -> twobody features + env weights
+        self.first_layer_env_embed_projection = latent(
+            mlp_input_dim=scalar_input_dim,
+            mlp_hidden_layer_dims=[],
+            mlp_hidden_layer_depth=None,
+            mlp_hidden_layer_width=None,
+            mlp_output_dim=self.num_scalar_features + self._env_weighter.weight_numel,
+            mlp_nonlinearity=None,
+        )
+        assert not self.first_layer_env_embed_projection.is_nonlinear
+
+        # === set up Allegro layers ===
         latent = functools.partial(latent, **latent_kwargs)
         self.latents = torch.nn.ModuleList([])
         self.tps = torch.nn.ModuleList([])
 
-        # Embed to the spharm * it as mul
-        input_irreps = self.irreps_in[self.tensor_basis_in_field]
-        # this is not inherant, but no reason to fix right now:
-        assert all(mul == 1 for mul, ir in input_irreps)
         env_embed_irreps = o3.Irreps([(1, ir) for _, ir in input_irreps])
         assert (
             env_embed_irreps[0].ir == SCALAR
@@ -146,25 +165,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         tps_irreps_in = tps_irreps[:-1]
         tps_irreps_out = tps_irreps[1:]
         del tps_irreps
-
-        # === env weighter ===
-        self._env_weighter = MakeWeightedChannels(
-            irreps_in=input_irreps,
-            multiplicity_out=self.num_tensor_features,
-            weight_individual_irreps=weight_individual_irreps,
-        )
-
-        # === first layer linear projection ===
-        # hardcode linear projection: twobody features -> twobody features + env weights
-        self.first_layer_env_embed_projection = latent(
-            mlp_input_dim=scalar_input_dim,
-            mlp_hidden_layer_dims=[],
-            mlp_hidden_layer_depth=None,
-            mlp_hidden_layer_width=None,
-            mlp_output_dim=self.num_scalar_features + self._env_weighter.weight_numel,
-            mlp_nonlinearity=None,
-        )
-        assert not self.first_layer_env_embed_projection.is_nonlinear
 
         # === Build TPs and latents ===
         self._n_scalar_outs = []
