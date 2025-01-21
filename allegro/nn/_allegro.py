@@ -147,12 +147,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         tps_irreps_out = tps_irreps[1:]
         del tps_irreps
 
-        # === edge `scatter` normalization ===
-        env_sum_constant = 1.0
-        if avg_num_neighbors is not None:
-            # we divide the env embed sums by sqrt(N) to normalize
-            env_sum_constant = 1.0 / math.sqrt(avg_num_neighbors)
-
         # === env weighter ===
         self._env_weighter = MakeWeightedChannels(
             irreps_in=input_irreps,
@@ -192,7 +186,9 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 irreps_out=o3.Irreps([(1, ir) for _, ir in out_irreps]),
                 mul=self.num_tensor_features,
                 path_channel_coupling=tp_path_channel_coupling,
-                scatter_factor=env_sum_constant,
+                # backwards normalization factor to account for `index_select` after `scatter`
+                # NOTE: `avg_num_neighbors` is not `None` because of the assert earlier
+                scatter_factor=1.0 / math.sqrt(avg_num_neighbors),
             )
             self.tps.append(tp)
             # we extract the scalars from the first irrep of the tp
