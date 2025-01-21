@@ -133,7 +133,10 @@ class ScalarMLPFunction(CodeGenMixin, torch.nn.Module):
             )
             # === weight initialization ===
             # normalize with output dim, i.e. normalize backwards pass for forces
-            if nonlinearity is None or layer == self.num_layers - 1:
+            if (
+                isinstance(nonlinearity, torch.nn.Identity)
+                or layer == self.num_layers - 1
+            ):
                 # no nonlinearity or last layer -> use `linear` gain (i.e. 1)
                 init_nonlinearity = "linear"
             else:
