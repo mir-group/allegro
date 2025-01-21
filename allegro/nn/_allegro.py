@@ -185,30 +185,22 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 irin1 = arg_irreps
                 irin2 = env_embed_irreps
 
-            n_scalar_outs: int = 0
-            for i_out, (_, ir_out) in enumerate(out_irreps):
-                for i_1, (_, ir_1) in enumerate(irin1):
-                    for i_2, (_, ir_2) in enumerate(irin2):
-                        if ir_out in ir_1 * ir_2:
-                            if ir_out == SCALAR:
-                                n_scalar_outs = 1
-
-            full_out_irreps = o3.Irreps(out_irreps)
-            self._n_scalar_outs.append(n_scalar_outs)
-            assert all(ir == SCALAR for _, ir in full_out_irreps[:n_scalar_outs])
             # note that we set the multiplicity as 1 because the strided layout is incompatible with e3nn's data format
             tp = Contracter(
                 irreps_in1=o3.Irreps([(1, ir) for _, ir in irin1]),
                 irreps_in2=o3.Irreps([(1, ir) for _, ir in irin2]),
-                irreps_out=o3.Irreps([(1, ir) for _, ir in full_out_irreps]),
+                irreps_out=o3.Irreps([(1, ir) for _, ir in out_irreps]),
                 mul=self.num_tensor_features,
                 path_channel_coupling=tp_path_channel_coupling,
                 scatter_factor=env_sum_constant,
             )
             self.tps.append(tp)
-            del tp
             # we extract the scalars from the first irrep of the tp
-            assert out_irreps[0].ir == SCALAR
+            # NOTE: the logic here can be updated to account for padded scalar irreps
+            n_scalar_outs: int = 1
+            self._n_scalar_outs.append(n_scalar_outs)
+            assert all(ir == SCALAR for _, ir in tp.irreps_out[:n_scalar_outs])
+            del tp
 
             self.latents.append(
                 latent(
