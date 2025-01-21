@@ -36,7 +36,7 @@ class Contracter(torch.nn.Module):
         instructions: Optional[List[Tuple[int, int, int]]] = None,
         path_channel_coupling: bool = False,  # i.e. "p" vs "uuup" mode
         scatter_factor: Optional[float] = None,
-        irrep_normalization: Optional[str] = None,
+        irrep_normalization: str = "component",
     ):
         super().__init__()
 
