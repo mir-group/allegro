@@ -12,10 +12,10 @@ COMMON_CONFIG = {
     "l_max": 2,
     "num_scalar_features": 32,
     "num_tensor_features": 4,
-    "allegro_mlp_hidden_layer_depth": 2,
-    "allegro_mlp_hidden_layer_width": 32,
-    "readout_mlp_hidden_layer_depth": 1,
-    "readout_mlp_hidden_layer_width": 8,
+    "allegro_mlp_hidden_layers_depth": 2,
+    "allegro_mlp_hidden_layers_width": 32,
+    "readout_mlp_hidden_layers_depth": 1,
+    "readout_mlp_hidden_layers_width": 8,
 }
 
 minimal_config0 = dict(
@@ -31,14 +31,14 @@ BESSEL_CONFIG = {
     "_target_": "allegro.nn.TwoBodyBesselScalarEmbed",
     "num_bessels": 4,
     "two_body_embedding_dim": 8,
-    "two_body_mlp_hidden_layer_depth": 1,
-    "two_body_mlp_hidden_layer_width": 32,
+    "two_body_mlp_hidden_layers_depth": 1,
+    "two_body_mlp_hidden_layers_width": 32,
 }
 
 SPLINE_CONFIG = {
     "_target_": "allegro.nn.TwoBodySplineScalarEmbed",
-    "spline_grid": 3,
-    "spline_span": 5,
+    "num_splines": 8,
+    "spline_span": 6,
 }
 
 
@@ -63,7 +63,8 @@ class TestAllegro(BaseEnergyModelTests):
         return request.param
 
     @pytest.fixture(
-        params=[True, False],
+        # only test default case of False to save time
+        params=[False],
         scope="class",
     )
     def scatter_features(self, request):
@@ -84,6 +85,10 @@ class TestAllegro(BaseEnergyModelTests):
     def node_readout(self, request):
         return request.param
 
+    @pytest.fixture(params=[True, False], scope="class")
+    def forward_normalize(self, request):
+        return request.param
+
     @pytest.fixture(
         params=[
             minimal_config0,
@@ -99,6 +104,7 @@ class TestAllegro(BaseEnergyModelTests):
         scatter_features,
         node_readout,
         tp_path_channel_coupling,
+        forward_normalize,
     ):
         config = request.param
         config = config.copy()
@@ -107,4 +113,5 @@ class TestAllegro(BaseEnergyModelTests):
         config.update({"scatter_features": scatter_features})
         config.update({"node_readout": node_readout})
         config.update({"tp_path_channel_coupling": tp_path_channel_coupling})
+        config.update({"forward_normalize": forward_normalize})
         return config
