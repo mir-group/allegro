@@ -13,7 +13,7 @@ class PerClassSpline(torch.nn.Module):
     Args:
         num_classes (int)  : number of classes or categories (for ``index_select`` operation)
         num_channels (int) : number of output channels
-        spline_grid (int)  : number of spline grid centers in [0, 1]
+        num_splines (int)  : number of spline basis functions
         spline_span (int)  : number of spline basis functions that overlap on spline grid points
     """
 
@@ -21,7 +21,7 @@ class PerClassSpline(torch.nn.Module):
         self,
         num_classes: int,
         num_channels: int,
-        spline_grid: int,
+        num_splines: int,
         spline_span: int,
         dtype: torch.dtype = _GLOBAL_DTYPE,
     ):
@@ -29,17 +29,18 @@ class PerClassSpline(torch.nn.Module):
         super().__init__()
         self.num_classes = num_classes
         self.num_channels = num_channels
-        self.spline_grid = spline_grid
+        self.num_splines = num_splines
         self.spline_span = spline_span
-        self.grid_dim = self.spline_grid + self.spline_span
         self.dtype = dtype
 
         # === spline grid parameters ===
-        # note that num_splines = spline_grid + spline_span
-        lower = torch.arange(-spline_span, spline_grid, dtype=self.dtype) / (
-            spline_grid + spline_span
+        lower = (
+            torch.arange(
+                -self.spline_span, self.num_splines - spline_span, dtype=self.dtype
+            )
+            / self.num_splines
         )
-        diff = (spline_span + 1) / (spline_grid + spline_span)
+        diff = (self.spline_span + 1) / self.num_splines
 
         self.register_buffer("lower", lower)
         self.register_buffer("upper", lower + diff)
@@ -48,7 +49,7 @@ class PerClassSpline(torch.nn.Module):
         # === use torch.nn.Embedding for spline weights ===
         self.class_embed = torch.nn.Embedding(
             num_embeddings=self.num_classes,
-            embedding_dim=self.num_channels * self.grid_dim,
+            embedding_dim=self.num_channels * self.num_splines,
             dtype=dtype,
         )
         # embedding weight init
@@ -59,7 +60,7 @@ class PerClassSpline(torch.nn.Module):
     def extra_repr(self) -> str:
         msg = f"num classes : {self.num_classes}\n"
         msg += f"num channels: {self.num_channels}\n"
-        msg += f"spline grid : {self.spline_grid}\n"
+        msg += f"num splines : {self.num_splines}\n"
         msg += f"spline span : {self.spline_span}"
         return msg
 
@@ -71,7 +72,7 @@ class PerClassSpline(torch.nn.Module):
         """
         # index out weights based on classes: -> (z, num_channels, num_splines)
         spline_weights = self.class_embed(classes).view(
-            classes.size(0), self.num_channels, self.grid_dim
+            classes.size(0), self.num_channels, self.num_splines
         )
         spline_basis = self._get_basis(x)
         return torch.einsum("ens, es -> en", spline_weights, spline_basis)

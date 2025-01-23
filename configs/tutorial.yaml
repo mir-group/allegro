@@ -96,7 +96,7 @@ training_module:
 
       # one could also use the spline embedding module with less hyperparameters
       # _target_: allegro.nn.TwoBodySplineScalarEmbed
-      # spline_grid: 5
+      # num_splines: 8
       # spline_span: 3
 
     # one could explicitly specify the initial scalar embedding's output dimension

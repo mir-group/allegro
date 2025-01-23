@@ -91,7 +91,7 @@ class TwoBodySplineScalarEmbed(GraphModuleMixin, torch.nn.Module):
     r"""Two-body scalar embedding based on B-splines for every edge type (pair of center-neighbor types).
 
     Args:
-        spline_grid (int): number of spline basis grid centers in [0, 1]
+        num_splines (int)  : number of spline basis functions
         spline_span (int): number of spline basis functions that overlap on spline grid centers
     """
 
@@ -99,7 +99,7 @@ class TwoBodySplineScalarEmbed(GraphModuleMixin, torch.nn.Module):
         self,
         type_names: Sequence[str],
         # spline params
-        spline_grid: int = 5,
+        num_splines: int = 8,
         spline_span: int = 3,
         # model builder params
         module_output_dim: int = 64,
@@ -121,7 +121,7 @@ class TwoBodySplineScalarEmbed(GraphModuleMixin, torch.nn.Module):
         self.spline = PerClassSpline(
             num_classes=self.num_types * self.num_types,
             num_channels=module_output_dim,
-            spline_grid=spline_grid,
+            num_splines=num_splines,
             spline_span=spline_span,
             dtype=_GLOBAL_DTYPE,
         )
