@@ -90,8 +90,8 @@ training_module:
       bessel_trainable: false
       polynomial_cutoff_p: 6
       two_body_embedding_dim: 32
-      two_body_mlp_hidden_layer_depth: 2
-      two_body_mlp_hidden_layer_width: 64
+      two_body_mlp_hidden_layers_depth: 2
+      two_body_mlp_hidden_layers_width: 64
       two_body_mlp_nonlinearity: silu
 
       # one could also use the spline embedding module with less hyperparameters
@@ -127,14 +127,14 @@ training_module:
     tp_path_channel_coupling: false
 
     # neural network parameters in the Allegro layers
-    allegro_mlp_hidden_layer_depth: 2
-    allegro_mlp_hidden_layer_width: 128
+    allegro_mlp_hidden_layers_depth: 2
+    allegro_mlp_hidden_layers_width: 128
     allegro_mlp_nonlinearity: silu
 
     # == readout ==
     # neural network parameters in the readout layer
-    readout_mlp_hidden_layer_depth: 1
-    readout_mlp_hidden_layer_width: 32
+    readout_mlp_hidden_layers_depth: 1
+    readout_mlp_hidden_layers_width: 32
     readout_mlp_nonlinearity: null
     # ^ setting `nonlinearity` to `null` means that output MLP is effectively a linear layer
 
