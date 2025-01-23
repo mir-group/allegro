@@ -15,7 +15,6 @@ class PerClassSpline(torch.nn.Module):
         num_channels (int) : number of output channels
         spline_grid (int)  : number of spline grid centers in [0, 1]
         spline_span (int)  : number of spline basis functions that overlap on spline grid points
-        lower_cutoff (bool): whether to impose that the output goes to zero smoothly at input <= 0
     """
 
     def __init__(
@@ -24,7 +23,6 @@ class PerClassSpline(torch.nn.Module):
         num_channels: int,
         spline_grid: int,
         spline_span: int,
-        lower_cutoff: bool = False,
         dtype: torch.dtype = _GLOBAL_DTYPE,
     ):
         # === initialize and save inputs parameters ===
@@ -34,23 +32,14 @@ class PerClassSpline(torch.nn.Module):
         self.spline_grid = spline_grid
         self.spline_span = spline_span
         self.grid_dim = self.spline_grid + self.spline_span
-        self.lower_cutoff = lower_cutoff
         self.dtype = dtype
 
         # === spline grid parameters ===
         # note that num_splines = spline_grid + spline_span
-        if lower_cutoff:
-            lower = (
-                torch.arange(-spline_span, spline_grid, dtype=self.dtype) / spline_grid
-            )
-            lower = lower + spline_span / spline_grid
-            lower = lower * spline_grid / (spline_grid + 2 * spline_span)
-            diff = (spline_span + 1) / (spline_grid + 2 * spline_span)
-        else:
-            lower = torch.arange(-spline_span, spline_grid, dtype=self.dtype) / (
-                spline_grid + spline_span
-            )
-            diff = (spline_span + 1) / (spline_grid + spline_span)
+        lower = torch.arange(-spline_span, spline_grid, dtype=self.dtype) / (
+            spline_grid + spline_span
+        )
+        diff = (spline_span + 1) / (spline_grid + spline_span)
 
         self.register_buffer("lower", lower)
         self.register_buffer("upper", lower + diff)
