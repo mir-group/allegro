@@ -8,9 +8,8 @@ from e3nn import o3
 from e3nn.util.jit import compile_mode
 
 from nequip.data import AtomicDataDict
-from nequip.nn import GraphModuleMixin, tp_path_exists
+from nequip.nn import GraphModuleMixin, ScalarMLPFunction, tp_path_exists
 
-from ._fc import ScalarMLPFunction
 from ._strided import Contracter, MakeWeightedChannels
 
 
@@ -91,12 +90,8 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         # === first layer linear projection ===
         # hardcode linear projection: twobody features -> twobody features + env weights
         self.first_layer_env_embed_projection = latent(
-            mlp_input_dim=scalar_input_dim,
-            mlp_hidden_layer_dims=[],
-            mlp_hidden_layer_depth=None,
-            mlp_hidden_layer_width=None,
-            mlp_output_dim=self.num_scalar_features + self._env_weighter.weight_numel,
-            mlp_nonlinearity=None,
+            input_dim=scalar_input_dim,
+            output_dim=self.num_scalar_features + self._env_weighter.weight_numel,
         )
         assert not self.first_layer_env_embed_projection.is_nonlinear
 
@@ -186,7 +181,9 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 irreps_out=o3.Irreps([(1, ir) for _, ir in out_irreps]),
                 mul=self.num_tensor_features,
                 path_channel_coupling=tp_path_channel_coupling,
-                # backwards normalization factor to account for `index_select` after `scatter`
+                # `scatter_factor` is the same for both forward and backwards normalization
+                # for forward normalization, it accounts for `scatter`
+                # for backward normalization, it accounts for `index_select`
                 # NOTE: `avg_num_neighbors` is not `None` because of the assert earlier
                 scatter_factor=1.0 / math.sqrt(avg_num_neighbors),
             )
@@ -200,7 +197,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
 
             self.latents.append(
                 latent(
-                    mlp_input_dim=(
+                    input_dim=(
                         # initial two-body scalar features +
                         # all scalar features from previous layer(s) (densenet structure)
                         self.num_scalar_features * (layer_idx + 1)
@@ -208,7 +205,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                         # each layer executes a TP and then a latent, so the last entry in _n_scalar_outs corresponds to this layer's TP
                         + self.num_tensor_features * self._n_scalar_outs[-1]
                     ),
-                    mlp_output_dim=(
+                    output_dim=(
                         # number of scalar features
                         self.num_scalar_features
                         # env weighter for next layer's TP (except in last layer)
