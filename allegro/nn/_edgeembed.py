@@ -4,9 +4,7 @@ from e3nn import o3
 from e3nn.util.jit import compile_mode
 
 from nequip.data import AtomicDataDict
-from nequip.nn import GraphModuleMixin
-
-from ._fc import ScalarMLPFunction
+from nequip.nn import GraphModuleMixin, ScalarMLPFunction
 
 from typing import List
 
@@ -26,6 +24,7 @@ class ProductTypeEmbedding(GraphModuleMixin, torch.nn.Module):
         self,
         type_names: List[str],
         initial_embedding_dim: int,
+        forward_weight_init: bool = True,
         # bookkeeping
         edge_type_field: str = AtomicDataDict.EDGE_TYPE_KEY,
         radial_features_in_field=AtomicDataDict.EDGE_EMBEDDING_KEY,
@@ -57,10 +56,9 @@ class ProductTypeEmbedding(GraphModuleMixin, torch.nn.Module):
 
         # == radial basis linear projection ==
         self.basis_linear = ScalarMLPFunction(
-            mlp_input_dim=self.irreps_in[self.in_field].num_irreps,
-            mlp_hidden_layer_dims=[],
-            mlp_output_dim=initial_embedding_dim,
-            mlp_nonlinearity=None,
+            input_dim=self.irreps_in[self.in_field].num_irreps,
+            output_dim=initial_embedding_dim,
+            forward_weight_init=forward_weight_init,
         )
         assert not self.basis_linear.is_nonlinear
 
