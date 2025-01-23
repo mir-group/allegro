@@ -4,9 +4,8 @@ from e3nn import o3
 from e3nn.util.jit import compile_mode
 
 from nequip.data import AtomicDataDict
-from nequip.nn import GraphModuleMixin, with_edge_vectors_
+from nequip.nn import GraphModuleMixin, ScalarMLPFunction, with_edge_vectors_
 
-from ._fc import ScalarMLPFunction
 from ._strided import MakeWeightedChannels
 
 from typing import Union
@@ -30,6 +29,7 @@ class TwoBodySphericalHarmonicTensorEmbed(GraphModuleMixin, torch.nn.Module):
         self,
         irreps_edge_sh: Union[int, str, o3.Irreps],
         num_tensor_features: int,
+        forward_weight_init: bool = True,
         # bookkeeping args
         scalar_embedding_in_field: str = AtomicDataDict.EDGE_EMBEDDING_KEY,
         tensor_basis_out_field: str = AtomicDataDict.EDGE_ATTRS_KEY,
@@ -72,10 +72,9 @@ class TwoBodySphericalHarmonicTensorEmbed(GraphModuleMixin, torch.nn.Module):
 
         # hardcode a linear projection
         self.env_embed_linear = ScalarMLPFunction(
-            mlp_input_dim=self.irreps_in[self.scalar_embedding_in_field].num_irreps,
-            mlp_hidden_layer_dims=[],
-            mlp_output_dim=self._edge_weighter.weight_numel,
-            mlp_nonlinearity=None,
+            input_dim=self.irreps_in[self.scalar_embedding_in_field].num_irreps,
+            output_dim=self._edge_weighter.weight_numel,
+            forward_weight_init=forward_weight_init,
         )
         assert not self.env_embed_linear.is_nonlinear
 
