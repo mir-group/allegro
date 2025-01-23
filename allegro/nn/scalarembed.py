@@ -1,15 +1,15 @@
+from math import sqrt
 import torch
 
 from e3nn import o3
 from e3nn.util.jit import compile_mode
 
 from nequip.data import AtomicDataDict
-from nequip.nn import GraphModuleMixin, SequentialGraphNetwork
+from nequip.nn import GraphModuleMixin, SequentialGraphNetwork, ScalarMLP
 from nequip.nn.embedding import PolynomialCutoff, BesselEdgeLengthEncoding
 from nequip.utils.global_dtype import _GLOBAL_DTYPE
 
 from ._edgeembed import ProductTypeEmbedding
-from ._fc import ScalarMLP
 from .spline import PerClassSpline
 
 from typing import Sequence, Optional
@@ -23,10 +23,13 @@ def TwoBodyBesselScalarEmbed(
     polynomial_cutoff_p: int = 6,
     # two body MLP
     two_body_embedding_dim: int = 32,
-    two_body_mlp_hidden_layer_depth: int = 2,
-    two_body_mlp_hidden_layer_width: int = 64,
+    two_body_mlp_hidden_layers_depth: int = 2,
+    two_body_mlp_hidden_layers_width: int = 64,
     two_body_mlp_nonlinearity: Optional[str] = "silu",
+    # model builder params
     module_output_dim: int = 64,
+    forward_weight_init: bool = True,
+    # bookkeeping
     scalar_embed_field: str = AtomicDataDict.EDGE_EMBEDDING_KEY,
     irreps_in=None,
 ) -> SequentialGraphNetwork:
@@ -44,8 +47,8 @@ def TwoBodyBesselScalarEmbed(
         bessel_trainable (int): whether Bessel roots are trainable
         polynomial_cutoff_p (int): p-exponent used in polynomial cutoff function, smaller p corresponds to stronger decay with distance
         two_body_embedding_dim: int = 32,
-        two_body_mlp_hidden_layer_depth: int = 2,
-        two_body_mlp_hidden_layer_width: int = 64,
+        two_body_mlp_hidden_layers_depth: int = 2,
+        two_body_mlp_hidden_layers_width: int = 64,
         two_body_mlp_nonlinearity (str): ``silu``, ``mish``, ``gelu``, or ``None`` (default ``silu``)
     """
     # the following args are for internal use in model building:
@@ -62,6 +65,7 @@ def TwoBodyBesselScalarEmbed(
     type_embed = ProductTypeEmbedding(
         type_names=type_names,
         initial_embedding_dim=two_body_embedding_dim,
+        forward_weight_init=forward_weight_init,
         radial_features_in_field=scalar_embed_field,
         edge_embed_out_field=scalar_embed_field,
         irreps_in=bessel_encode.irreps_out,
@@ -70,10 +74,11 @@ def TwoBodyBesselScalarEmbed(
     twobody_mlp = ScalarMLP(
         # input dims from previous module
         field=scalar_embed_field,
-        mlp_output_dim=module_output_dim,
-        mlp_hidden_layer_depth=two_body_mlp_hidden_layer_depth,
-        mlp_hidden_layer_width=two_body_mlp_hidden_layer_width,
-        mlp_nonlinearity=two_body_mlp_nonlinearity,
+        output_dim=module_output_dim,
+        hidden_layers_depth=two_body_mlp_hidden_layers_depth,
+        hidden_layers_width=two_body_mlp_hidden_layers_width,
+        nonlinearity=two_body_mlp_nonlinearity,
+        forward_weight_init=forward_weight_init,
         irreps_in=type_embed.irreps_out,
     )
 
@@ -103,6 +108,7 @@ class TwoBodySplineScalarEmbed(GraphModuleMixin, torch.nn.Module):
         spline_span: int = 3,
         # model builder params
         module_output_dim: int = 64,
+        forward_weight_init: bool = True,
         # bookkeeping
         scalar_embed_field: str = AtomicDataDict.EDGE_EMBEDDING_KEY,
         edge_type_field: str = AtomicDataDict.EDGE_TYPE_KEY,
@@ -125,6 +131,17 @@ class TwoBodySplineScalarEmbed(GraphModuleMixin, torch.nn.Module):
             spline_span=spline_span,
             dtype=_GLOBAL_DTYPE,
         )
+
+        # === embedding weight init ===
+        # this should in principle be done in the spline module, but we might as well do it here instead of passing the argument on
+        if forward_weight_init:
+            # since splines have finite support, we only account for overlapping splines
+            # the overlap is approximately `spline_span` (though it should be less)
+            bound = sqrt(3 / spline_span)
+        else:
+            bound = sqrt(3 / self.spline.num_channels)
+        torch.nn.init.uniform_(self.spline.class_embed.weight, a=-bound, b=bound)
+        del bound
 
         self._init_irreps(
             irreps_in=irreps_in,

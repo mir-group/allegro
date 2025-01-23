@@ -1,4 +1,4 @@
-from math import pi, sqrt
+from math import pi
 import torch
 from e3nn.util.jit import compile_mode
 from nequip.utils.global_dtype import _GLOBAL_DTYPE
@@ -52,10 +52,6 @@ class PerClassSpline(torch.nn.Module):
             embedding_dim=self.num_channels * self.num_splines,
             dtype=dtype,
         )
-        # embedding weight init
-        bound = sqrt(3 / self.num_channels)
-        torch.nn.init.uniform_(self.class_embed.weight, a=-bound, b=bound)
-        del bound
 
     def extra_repr(self) -> str:
         msg = f"num classes : {self.num_classes}\n"
