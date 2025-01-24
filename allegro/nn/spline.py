@@ -25,8 +25,13 @@ class PerClassSpline(torch.nn.Module):
         spline_span: int,
         dtype: torch.dtype = _GLOBAL_DTYPE,
     ):
-        # === initialize and save inputs parameters ===
         super().__init__()
+
+        # === sanity check ===
+        assert 0 <= spline_span <= num_splines
+        assert num_splines > 0
+
+        # === save inputs parameters ===
         self.num_classes = num_classes
         self.num_channels = num_channels
         self.num_splines = num_splines
