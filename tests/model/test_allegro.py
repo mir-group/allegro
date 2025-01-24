@@ -77,14 +77,6 @@ class TestAllegro(BaseEnergyModelTests):
     def tp_path_channel_coupling(self, request):
         return request.param
 
-    @pytest.fixture(
-        # only test default case of False to save time
-        params=[False],
-        scope="class",
-    )
-    def node_readout(self, request):
-        return request.param
-
     @pytest.fixture(params=[True, False], scope="class")
     def forward_normalize(self, request):
         return request.param
@@ -102,7 +94,6 @@ class TestAllegro(BaseEnergyModelTests):
         scalar_embed_config,
         parity_setting,
         scatter_features,
-        node_readout,
         tp_path_channel_coupling,
         forward_normalize,
     ):
@@ -111,7 +102,6 @@ class TestAllegro(BaseEnergyModelTests):
         config.update({"scalar_embed": scalar_embed_config})
         config.update({"parity_setting": parity_setting})
         config.update({"scatter_features": scatter_features})
-        config.update({"node_readout": node_readout})
         config.update({"tp_path_channel_coupling": tp_path_channel_coupling})
         config.update({"forward_normalize": forward_normalize})
         return config

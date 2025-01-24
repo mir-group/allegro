@@ -9,7 +9,6 @@ from nequip.nn import (
     AtomwiseReduce,
     PerTypeScaleShift,
     ForceStressOutput,
-    ApplyFactor,
 )
 
 from nequip.nn.embedding import (
@@ -74,7 +73,6 @@ def AllegroModel(**kwargs):
         allegro_mlp_hidden_layers_depth (int): number of layers in MLPs used at each Allegro layer
         allegro_mlp_hidden_layers_width (int): number of neurons per layer in MLPs used at each Allegro layer
         allegro_mlp_nonlinearity (str): ``silu``, ``mish``, ``gelu``, or ``None`` (default ``silu``)
-        node_readout (bool): whether the readout is applied on node features or edge features [note that both options are equivalent if the readout MLP is linear] (default ``False``)
         readout_mlp_hidden_layers_depth (int): number of layers in the readout MLP
         readout_mlp_hidden_layers_width (int): number of neurons per layer in the readout MLP
         readout_mlp_nonlinearity (str): ``silu``, ``mish``, ``gelu``, or ``None`` (default ``None``)
@@ -107,7 +105,6 @@ def FullAllegroEnergyModel(
     allegro_mlp_hidden_layers_width: int = 64,
     allegro_mlp_nonlinearity: Optional[str] = "silu",
     # readout
-    node_readout: bool = False,
     readout_mlp_hidden_layers_depth: int = 2,
     readout_mlp_hidden_layers_width: int = 32,
     readout_mlp_nonlinearity: Optional[str] = None,
@@ -193,70 +190,24 @@ def FullAllegroEnergyModel(
     }
 
     # === allegro readout ===
-    if node_readout:
-        edge_scatter = EdgewiseReduce(
-            field=AtomicDataDict.EDGE_FEATURES_KEY,
-            out_field=AtomicDataDict.NODE_FEATURES_KEY,
-            # only apply normalization if normalizing for forward pass
-            factor=1.0 / math.sqrt(avg_num_neighbors) if forward_normalize else None,
-            irreps_in=allegro.irreps_out,
-        )
-        node_readout = ScalarMLP(
-            output_dim=1,
-            hidden_layers_depth=readout_mlp_hidden_layers_depth,
-            hidden_layers_width=readout_mlp_hidden_layers_width,
-            nonlinearity=readout_mlp_nonlinearity,
-            bias=False,
-            forward_weight_init=forward_normalize,
-            field=AtomicDataDict.NODE_FEATURES_KEY,
-            out_field=AtomicDataDict.PER_ATOM_ENERGY_KEY,
-            irreps_in=edge_scatter.irreps_out,
-        )
-        readout_irreps_out = node_readout.irreps_out
-        modules.update(
-            {
-                "edge_scatter": edge_scatter,
-                "node_readout": node_readout,
-            }
-        )
-
-        # apply factor for backward/force normalization
-        # factor of 2 to normalize dE/dr_i which includes both contributions from dE/dr_ij and every other derivative against r_ji
-        if not forward_normalize:
-            normalization = ApplyFactor(
-                in_field=AtomicDataDict.PER_ATOM_ENERGY_KEY,
-                factor=1.0 / math.sqrt(2 * avg_num_neighbors),
-                irreps_in=readout_irreps_out,
-            )
-            readout_irreps_out = normalization.irreps_out
-            modules.update({"normalization": normalization})
-
-    else:
-        edge_readout = ScalarMLP(
-            output_dim=1,
-            hidden_layers_depth=readout_mlp_hidden_layers_depth,
-            hidden_layers_width=readout_mlp_hidden_layers_width,
-            nonlinearity=readout_mlp_nonlinearity,
-            bias=False,
-            forward_weight_init=forward_normalize,
-            field=AtomicDataDict.EDGE_FEATURES_KEY,
-            out_field=AtomicDataDict.EDGE_ENERGY_KEY,
-            irreps_in=allegro.irreps_out,
-        )
-        edge_eng_sum = EdgewiseReduce(
-            field=AtomicDataDict.EDGE_ENERGY_KEY,
-            out_field=AtomicDataDict.PER_ATOM_ENERGY_KEY,
-            factor=1.0 / math.sqrt(2 * avg_num_neighbors),
-            # ^ factor of 2 to normalize dE/dr_i which includes both contributions from dE/dr_ij and every other derivative against r_ji
-            irreps_in=edge_readout.irreps_out,
-        )
-        readout_irreps_out = edge_eng_sum.irreps_out
-        modules.update(
-            {
-                "edge_readout": edge_readout,
-                "edge_eng_sum": edge_eng_sum,
-            }
-        )
+    edge_readout = ScalarMLP(
+        output_dim=1,
+        hidden_layers_depth=readout_mlp_hidden_layers_depth,
+        hidden_layers_width=readout_mlp_hidden_layers_width,
+        nonlinearity=readout_mlp_nonlinearity,
+        bias=False,
+        forward_weight_init=forward_normalize,
+        field=AtomicDataDict.EDGE_FEATURES_KEY,
+        out_field=AtomicDataDict.EDGE_ENERGY_KEY,
+        irreps_in=allegro.irreps_out,
+    )
+    edge_eng_sum = EdgewiseReduce(
+        field=AtomicDataDict.EDGE_ENERGY_KEY,
+        out_field=AtomicDataDict.PER_ATOM_ENERGY_KEY,
+        factor=1.0 / math.sqrt(2 * avg_num_neighbors),
+        # ^ factor of 2 to normalize dE/dr_i which includes both contributions from dE/dr_ij and every other derivative against r_ji
+        irreps_in=edge_readout.irreps_out,
+    )
 
     # === per type scale shift ===
     per_type_energy_scale_shift = PerTypeScaleShift(
@@ -267,10 +218,16 @@ def FullAllegroEnergyModel(
         shifts=per_type_energy_shifts,
         scales_trainable=per_type_energy_scales_trainable,
         shifts_trainable=per_type_energy_shifts_trainable,
-        irreps_in=readout_irreps_out,
+        irreps_in=edge_eng_sum.irreps_out,
     )
 
-    modules.update({"per_type_energy_scale_shift": per_type_energy_scale_shift})
+    modules.update(
+        {
+            "edge_readout": edge_readout,
+            "edge_eng_sum": edge_eng_sum,
+            "per_type_energy_scale_shift": per_type_energy_scale_shift,
+        }
+    )
 
     # === pair potentials ===
     prev_irreps_out = per_type_energy_scale_shift.irreps_out
