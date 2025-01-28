@@ -172,12 +172,7 @@ class Contracter(torch.nn.Module):
             weight_label = weight_label + "p"
             weight_shape = weight_shape + (self.num_paths,)
         self.weights = torch.nn.Parameter(torch.randn(weight_shape))
-        with torch.no_grad():
-            init_range = (
-                math.sqrt(3 / self.mul) if path_channel_coupling else math.sqrt(3)
-            )
-            self.weights.uniform_(-init_range, init_range)
-            del init_range
+        torch.nn.init.uniform_(self.weights, -math.sqrt(3), math.sqrt(3))
 
         # -- Prepare the einstrings --
         j = "i" if w3j_is_ij_diagonal else "j"
