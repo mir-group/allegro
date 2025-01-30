@@ -129,47 +129,43 @@ class Contracter(torch.nn.Module):
         # the need for computing the full outer product.
 
         if w3j_is_ij_diagonal:
-            # i k p
-            w3j = torch.zeros(base_irreps1.dim, base_irreps_out.dim, self.num_paths)
+            # pik
+            w3j = torch.zeros(self.num_paths, base_irreps1.dim, base_irreps_out.dim)
             for path_index, (path_w3j_indexes, path_w3j_values) in enumerate(
                 zip(w3j_index, w3j_values)
             ):
                 w3j[
+                    path_index,  # p
                     path_w3j_indexes[:, 0],  # i
                     path_w3j_indexes[:, 2],  # k
-                    path_index,  # p
                 ] = path_w3j_values
         else:
-            # i j k p
+            # pijk
             w3j = torch.zeros(
-                base_irreps1.dim, base_irreps2.dim, base_irreps_out.dim, self.num_paths
+                self.num_paths,
+                base_irreps1.dim,
+                base_irreps2.dim,
+                base_irreps_out.dim,
             )
             for path_index, (path_w3j_indexes, path_w3j_values) in enumerate(
                 zip(w3j_index, w3j_values)
             ):
                 w3j[
+                    path_index,  # p
                     path_w3j_indexes[:, 0],  # i
                     path_w3j_indexes[:, 1],  # j
                     path_w3j_indexes[:, 2],  # k
-                    path_index,  # p
                 ] = path_w3j_values
 
         # remove path dims of w3j if there's only one path
         if self.num_paths == 1:
-            w3j = w3j.squeeze(dim=-1)
+            w3j = w3j.squeeze(dim=0)  # ik or ijk
         self.register_buffer("w3j", w3j)
 
         # -- Make the path mixing weights --
         # "p" mode (p,) weights vs "uuup" mode (u,p) weights
-        if path_channel_coupling:
-            weight_label = "u"
-            weight_shape = (self.mul,)
-        else:
-            weight_label = ""
-            weight_shape = tuple()
+        weight_shape = (self.mul,) if path_channel_coupling else tuple()
         if self.num_paths > 1:
-            # either "p" or "up"
-            weight_label = weight_label + "p"
             weight_shape = weight_shape + (self.num_paths,)
         self.weights = torch.nn.Parameter(torch.randn(weight_shape))
         torch.nn.init.uniform_(self.weights, -math.sqrt(3), math.sqrt(3))
@@ -178,9 +174,8 @@ class Contracter(torch.nn.Module):
         j = "i" if w3j_is_ij_diagonal else "j"
         ij = "i" if w3j_is_ij_diagonal else "ij"
         p = "p" if self.num_paths > 1 else ""
-        self._weight_w3j_einstr = (
-            f"{ij}k{p},{weight_label}->{weight_label.rstrip('p')}{ij}k"
-        )
+        u = "u" if path_channel_coupling else ""
+        self._weight_w3j_einstr = f"{u}{p},{p}{ij}k->{u}{ij}k"
         # note that PyTorch appears to contract left-to-right by default in C++
         # (which is all we get for the TorchScript backend, the default opt_einsum
         # support does not apply):
@@ -189,7 +184,7 @@ class Contracter(torch.nn.Module):
         #  zui,zuj->zuij (outer product)
         #  zuij,(u)ijk->zuk  (matmul)
         self._outer_einstr = f"zui,zu{j}->zu{ij}"
-        self._matmul_einstr = f"zu{ij},{weight_label.rstrip('p')}{ij}k->zuk"
+        self._matmul_einstr = f"zu{ij},{u}{ij}k->zuk"
 
     def forward(
         self,
@@ -215,10 +210,17 @@ class Contracter(torch.nn.Module):
         # convert to strided shape
         x1 = x1.reshape(-1, self.mul, self.base_dim1)
         x2 = x2.reshape(-1, self.mul, self.base_dim2)
+
         # for shared weights, we can precontract weights and w3j so they can be frozen together
         # this is usually advantageous for inference, since the weights would have to be
         # multiplied in anyway at some point
-        ww3j = torch.einsum(self._weight_w3j_einstr, self.w3j, self.weights)
+        # `up, pijk -> uijk`` or `p, pijk -> ijk`
+        if self.num_paths >= 1:
+            ww3j = torch.einsum(self._weight_w3j_einstr, self.weights, self.w3j)
+        else:
+            # account for `_, ijk -> ijk`, i.e. single path case
+            ww3j = self.w3j
+
         # now do the TP with the pre-contracted w3j
         outer = torch.einsum(self._outer_einstr, x1, x2)
         out = torch.einsum(self._matmul_einstr, outer, ww3j)
