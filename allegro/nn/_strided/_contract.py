@@ -120,7 +120,7 @@ class Contracter(torch.nn.Module):
         # since these are coordinates of non-zero entries, if all nonzero entries
         # have i == j, then the matrix is diagonal
         # since we'll sum over the paths, if every path is diagonal, then the sum is diagonal
-        w3j_is_ij_diagonal: bool = (base_irreps1.dim == base_irreps2.dim) and all(
+        self.w3j_is_ij_diagonal: bool = (base_irreps1.dim == base_irreps2.dim) and all(
             torch.all(e[:, 0] == e[:, 1]) for e in w3j_index
         )
         # in this case we are only taking diagonal (i == j)
@@ -128,7 +128,7 @@ class Contracter(torch.nn.Module):
         # the direct multiplication of the two tensors, eliminating
         # the need for computing the full outer product.
 
-        if w3j_is_ij_diagonal:
+        if self.w3j_is_ij_diagonal:
             # pik
             w3j = torch.zeros(self.num_paths, base_irreps1.dim, base_irreps_out.dim)
             for path_index, (path_w3j_indexes, path_w3j_values) in enumerate(
@@ -162,29 +162,20 @@ class Contracter(torch.nn.Module):
             w3j = w3j.squeeze(dim=0)  # ik or ijk
         self.register_buffer("w3j", w3j)
 
-        # -- Make the path mixing weights --
+        # === path mixing weights ===
         # "p" mode (p,) weights vs "uuup" mode (u,p) weights
-        weight_shape = (self.mul,) if path_channel_coupling else tuple()
+        self.path_channel_coupling = path_channel_coupling
+        weight_shape = (self.mul,) if self.path_channel_coupling else tuple()
         if self.num_paths > 1:
             weight_shape = weight_shape + (self.num_paths,)
         self.weights = torch.nn.Parameter(torch.randn(weight_shape))
         torch.nn.init.uniform_(self.weights, -math.sqrt(3), math.sqrt(3))
 
-        # -- Prepare the einstrings --
-        j = "i" if w3j_is_ij_diagonal else "j"
-        ij = "i" if w3j_is_ij_diagonal else "ij"
+        # === get ww3j einstring ===
+        ij = "i" if self.w3j_is_ij_diagonal else "ij"
         p = "p" if self.num_paths > 1 else ""
-        u = "u" if path_channel_coupling else ""
+        u = "u" if self.path_channel_coupling else ""
         self._weight_w3j_einstr = f"{u}{p},{p}{ij}k->{u}{ij}k"
-        # note that PyTorch appears to contract left-to-right by default in C++
-        # (which is all we get for the TorchScript backend, the default opt_einsum
-        # support does not apply):
-        # https://github.com/pytorch/pytorch/blob/ad39a2fc462fd14ad5442d2f21eed1d2c34a20eb/aten/src/ATen/native/Linear.cpp#L551-L552
-        # We arange the einstr to do in order:
-        #  zui,zuj->zuij (outer product)
-        #  zuij,(u)ijk->zuk  (matmul)
-        self._outer_einstr = f"zui,zu{j}->zu{ij}"
-        self._matmul_einstr = f"zu{ij},{u}{ij}k->zuk"
 
     def forward(
         self,
@@ -222,8 +213,31 @@ class Contracter(torch.nn.Module):
             ww3j = self.w3j
 
         # now do the TP with the pre-contracted w3j
-        outer = torch.einsum(self._outer_einstr, x1, x2)
-        out = torch.einsum(self._matmul_einstr, outer, ww3j)
+        if self.w3j_is_ij_diagonal:
+            # zui, zui -> zui
+            outer = x1 * x2
+            if self.path_channel_coupling:
+                # zui1, uik -> zuk
+                out = torch.sum(outer.unsqueeze(-1) * ww3j, 2)
+            else:
+                # zui, ik -> zuk
+                out = torch.mm(outer.view(-1, outer.size(2)), ww3j).view(
+                    outer.size(0), outer.size(1), ww3j.size(1)
+                )
+        else:
+            # zui, zuj -> zuij
+            outer = x1.unsqueeze(-1) * x2.unsqueeze(-2)
+            if self.path_channel_coupling:
+                # zuij, uijk -> zuk
+                out = torch.sum(outer.unsqueeze(-1) * ww3j, (2, 3))
+            else:
+                # (zu)(ij), (ij)k -> (zu)k -> zuk
+                out = torch.mm(
+                    outer.view(
+                        outer.size(0) * outer.size(1), outer.size(2) * outer.size(3)
+                    ),
+                    ww3j.view(-1, ww3j.size(2)),
+                ).view(-1, self.mul, ww3j.size(2))
         return out
 
     def extra_repr(self):
