@@ -46,16 +46,15 @@ class MakeWeightedChannels(torch.nn.Module):
             # edge_attr are [z, i]
             # r runs over all irreps, which is why the weights need
             # to be indexed in order to go from [r] to [i]
-            return torch.einsum(
-                "zi,zui->zui",
-                edge_attr,
-                # [zu]r @ ri -> [zu]i -> zui
-                torch.mm(weights.reshape(-1, self._num_irreps), self._rtoi).view(
-                    edge_attr.size(0),
-                    self.multiplicity_out,
-                    self._rtoi.shape[1],
-                ),
+            # [zu]r @ ri -> [zu]i -> zui
+            aux = torch.mm(weights.reshape(-1, self._num_irreps), self._rtoi).view(
+                edge_attr.size(0),
+                self.multiplicity_out,
+                self._rtoi.shape[1],
             )
+            # zi,zui->zui
+            return edge_attr.unsqueeze(1) * aux
+
         else:
             # weights are [z, u]
             # edge_attr are [z, i]
