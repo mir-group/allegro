@@ -76,7 +76,8 @@ class PerClassSpline(torch.nn.Module):
             classes.size(0), self.num_channels, self.num_splines
         )
         spline_basis = self._get_basis(x)
-        return torch.einsum("ens, es -> en", spline_weights, spline_basis)
+        # (z, num_channels, num_splines), (z, num_splines) -> (z, num_channels)
+        return torch.bmm(spline_weights, spline_basis.unsqueeze(-1)).squeeze(-1)
 
     def _get_basis(self, x: torch.Tensor) -> torch.Tensor:
         # construct spline basis
