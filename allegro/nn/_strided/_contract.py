@@ -37,6 +37,7 @@ class Contracter(torch.nn.Module):
         path_channel_coupling: bool = False,  # i.e. "p" vs "uuup" mode
         scatter_factor: Optional[float] = None,
         irrep_normalization: str = "component",
+        use_custom_kernels: bool = False,
     ):
         super().__init__()
 
@@ -113,7 +114,6 @@ class Contracter(torch.nn.Module):
             this_w3j_index[:, 1] += base_irreps2[: ins[1]].dim
             this_w3j_index[:, 2] += base_irreps_out[: ins[2]].dim
             w3j_index.append(this_w3j_index)
-
             del ir_in1, ir_in2, ir_out, w3j_norm_term, this_w3j, this_w3j_index
 
         # for every path, all i indexes are equal to all j indexes?
@@ -147,6 +147,7 @@ class Contracter(torch.nn.Module):
                 base_irreps2.dim,
                 base_irreps_out.dim,
             )
+
             for path_index, (path_w3j_indexes, path_w3j_values) in enumerate(
                 zip(w3j_index, w3j_values)
             ):
@@ -177,6 +178,25 @@ class Contracter(torch.nn.Module):
         u = "u" if self.path_channel_coupling else ""
         self._weight_w3j_einstr = f"{u}{p},{p}{ij}k->{u}{ij}k"
 
+        # === condition for triggering kernel code path ===
+        self.use_custom_kernels = (
+            use_custom_kernels and not self.w3j_is_ij_diagonal and self.num_paths > 1
+        )
+        if self.use_custom_kernels:
+            from ._flashallegro import FlashAllegroKernel
+
+            # set up kernel
+            self.custom_kernel = FlashAllegroKernel(
+                w3j=self.w3j,
+                path_channel_coupling=self.path_channel_coupling,
+                base_dim_out=self.base_dim_out,
+                base_dim1=self.base_dim1,
+                base_dim2=self.base_dim2,
+            )
+        else:
+            # we need the following to placate TorchScript
+            self.custom_kernel = _dummy_custom_kernel
+
     def forward(
         self,
         x1: torch.Tensor,
@@ -186,8 +206,10 @@ class Contracter(torch.nn.Module):
     ) -> torch.Tensor:
         # === optional scatter + index_select ===
         # normalize if normalization provided
+
         if self.scatter_factor is not None:
             x2 = self.scatter_factor * x2
+
         # scatter and index select
         x2_scatter = scatter(
             x2,
@@ -202,43 +224,54 @@ class Contracter(torch.nn.Module):
         x1 = x1.reshape(-1, self.mul, self.base_dim1)
         x2 = x2.reshape(-1, self.mul, self.base_dim2)
 
-        # for shared weights, we can precontract weights and w3j so they can be frozen together
-        # this is usually advantageous for inference, since the weights would have to be
-        # multiplied in anyway at some point
-        # `up, pijk -> uijk`` or `p, pijk -> ijk`
-        if self.num_paths >= 1:
-            ww3j = torch.einsum(self._weight_w3j_einstr, self.weights, self.w3j)
+        # take custom kernel path at runtime if kernel conditions are met at init and the input is on the GPU
+        if self.use_custom_kernels and x1.is_cuda:
+            out = self.custom_kernel(x1, x2, self.weights)
         else:
-            # account for `_, ijk -> ijk`, i.e. single path case
-            ww3j = self.w3j
+            # for shared weights, we can precontract weights and w3j so they can be frozen together
+            # this is usually advantageous for inference, since the weights would have to be
+            # multiplied in anyway at some point
+            # `up, pijk -> uijk`` or `p, pijk -> ijk`
+            if self.num_paths >= 1:
+                ww3j = torch.einsum(self._weight_w3j_einstr, self.weights, self.w3j)
+            else:
+                # account for `_, ijk -> ijk`, i.e. single path case
+                ww3j = self.w3j
 
-        # now do the TP with the pre-contracted w3j
-        if self.w3j_is_ij_diagonal:
-            # zui, zui -> zui
-            outer = x1 * x2
-            if self.path_channel_coupling:
-                # zui1, uik -> zuk
-                out = torch.sum(outer.unsqueeze(-1) * ww3j, 2)
+            # now do the TP with the pre-contracted w3j
+            if self.w3j_is_ij_diagonal:
+                # zui, zui -> zui
+                outer = x1 * x2
+                if self.path_channel_coupling:
+                    # zui1, uik -> zuk
+                    out = torch.sum(outer.unsqueeze(-1) * ww3j, 2)
+                else:
+                    # zui, ik -> zuk
+                    out = torch.mm(outer.view(-1, outer.size(2)), ww3j).view(
+                        outer.size(0), outer.size(1), ww3j.size(1)
+                    )
             else:
-                # zui, ik -> zuk
-                out = torch.mm(outer.view(-1, outer.size(2)), ww3j).view(
-                    outer.size(0), outer.size(1), ww3j.size(1)
-                )
-        else:
-            # zui, zuj -> zuij
-            outer = x1.unsqueeze(-1) * x2.unsqueeze(-2)
-            if self.path_channel_coupling:
-                # zuij, uijk -> zuk
-                out = torch.sum(outer.unsqueeze(-1) * ww3j, (2, 3))
-            else:
-                # (zu)(ij), (ij)k -> (zu)k -> zuk
-                out = torch.mm(
-                    outer.view(
-                        outer.size(0) * outer.size(1), outer.size(2) * outer.size(3)
-                    ),
-                    ww3j.view(-1, ww3j.size(2)),
-                ).view(-1, self.mul, ww3j.size(2))
+                # zui, zuj -> zuij
+                outer = x1.unsqueeze(-1) * x2.unsqueeze(-2)
+                if self.path_channel_coupling:
+                    # zuij, uijk -> zuk
+                    out = torch.sum(outer.unsqueeze(-1) * ww3j, (2, 3))
+                else:
+                    # (zu)(ij), (ij)k -> (zu)k -> zuk
+                    out = torch.mm(
+                        outer.view(
+                            outer.size(0) * outer.size(1), outer.size(2) * outer.size(3)
+                        ),
+                        ww3j.view(-1, ww3j.size(2)),
+                    ).view(-1, self.mul, ww3j.size(2))
         return out
 
     def extra_repr(self):
         return f"{self.irreps_in1} x {self.irreps_in2} -> {self.irreps_out} | {self.mul} channels | {self.num_paths} paths"
+
+
+@torch.jit.unused
+def _dummy_custom_kernel(
+    x1: torch.Tensor, x2: torch.Tensor, weights: torch.Tensor
+) -> torch.Tensor:
+    return torch.Tensor()

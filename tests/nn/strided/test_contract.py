@@ -7,6 +7,7 @@ from e3nn.util.test import assert_equivariant
 from nequip.utils import torch_default_dtype, dtype_from_name
 from allegro.nn._strided import Contracter
 
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 @pytest.mark.parametrize("irreps_in1", ["0e + 0o + 1e + 1o", "2o + 1e + 0e"])
 @pytest.mark.parametrize("irreps_in2", ["0e + 0o + 1e + 1o"])
@@ -40,7 +41,7 @@ def test_contract(
             mul=mul,
             instructions=instr,
             path_channel_coupling=path_channel_coupling,
-        )
+        ).to(device=device)
         c_opt_mod = Contracter(
             irreps_in1=o3.Irreps((1, ir) for _, ir in irreps_in1),
             irreps_in2=o3.Irreps((1, ir) for _, ir in irreps_in2),
@@ -48,10 +49,11 @@ def test_contract(
             mul=mul,
             instructions=instr,
             path_channel_coupling=path_channel_coupling,
-        )
+            custom_kernels=True
+        ).to(device=device)
         with torch.no_grad():
             c_opt_mod.weights.copy_(c_base.weights)
-        c_opt_mod = torch.jit.script(c_opt_mod)
+        #c_opt_mod = torch.jit.script(c_opt_mod) # Commentig now for kernels
 
         def c_opt(x, y, idx, dim, w=None):
             args = (x, y, idx, dim, w)
@@ -63,13 +65,13 @@ def test_contract(
         scatter_dim = torch.tensor([batchdim], dtype=torch.long)
         scatter_idxs = torch.arange(batchdim)
         args_in = (
-            irreps_in1.randn(batchdim, mul, -1),
-            irreps_in2.randn(batchdim, mul, -1),
-            scatter_idxs,
-            scatter_dim,
+            irreps_in1.randn(batchdim, mul, -1).to(device=device),
+            irreps_in2.randn(batchdim, mul, -1).to(device=device),
+            scatter_idxs.to(device=device),
+            scatter_dim.to(device=device),
             torch.randn(
                 tuple(batchdim if e == -1 else e for e in c_base.weights.shape)
-            ),
+            ).to(device=device),
         )
         args_in = args_in[:-1]
 
@@ -146,15 +148,16 @@ def test_like_tp(
             mul=mul,
             instructions=instr,
             path_channel_coupling=True,
+            custom_kernels=True,
             irrep_normalization=irrep_normalization,
-        )
+        ).to(device=device)
         print(c)
         # make input data
         batchdim = 1
-        scatter_idxs = torch.arange(batchdim)
-        scatter_dim = torch.tensor([batchdim], dtype=torch.long)
-        tensor1 = torch.randn(batchdim, mul, c.base_dim1)
-        tensor2 = torch.randn(batchdim, mul, c.base_dim2)
+        scatter_idxs = torch.arange(batchdim).to(device=device)
+        scatter_dim = torch.tensor([batchdim], dtype=torch.long).to(device=device)
+        tensor1 = torch.randn(batchdim, mul, c.base_dim1).to(device=device)
+        tensor2 = torch.randn(batchdim, mul, c.base_dim2).to(device=device)
 
         # TP
         tp = o3.TensorProduct(
@@ -168,7 +171,7 @@ def test_like_tp(
             path_normalization="none",
             shared_weights=True,
             internal_weights=False,
-        )
+        ).to(device=device)
         print(tp)
         assert tp.weight_numel == c.weights.numel()
         # to convert the weights, note that for Contracter
