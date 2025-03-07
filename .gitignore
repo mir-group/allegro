@@ -4,6 +4,9 @@ wandb/
 benchmark_data/
 .idea/
 results/
+aspirin_data/
+lightning_logs/
+outputs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
