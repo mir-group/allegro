@@ -16,31 +16,16 @@ data:
   trainval_test_subset: [40, 10]
   train_val_split: [30, 10]
   seed: 123
-  train_dataloader_kwargs:
+  train_dataloader:
+    _target_: torch.utils.data.DataLoader
     batch_size: 1
-  val_dataloader_kwargs:
+  val_dataloader:
+    _target_: torch.utils.data.DataLoader
     batch_size: 5
-  test_dataloader_kwargs: ${data.val_dataloader_kwargs}
+  test_dataloader: ${data.val_dataloader}
   stats_manager:
-    _target_: nequip.data.DataStatisticsManager
+    _target_: nequip.data.CommonDataStatisticsManager
     type_names: ${model_type_names}
-    metrics:
-      - field:
-          _target_: nequip.data.NumNeighbors
-        metric: 
-          _target_: nequip.data.Mean
-        name: num_neighbors_mean
-      - field:
-          _target_: nequip.data.PerAtomModifier
-          field: total_energy
-        metric:
-          _target_: nequip.data.Mean
-        name: per_atom_energy_mean
-      - field: forces
-        metric:
-          _target_: nequip.data.RootMeanSquare
-        per_type: true
-        name: per_type_forces_rms
 
 trainer:
   _target_: lightning.Trainer
@@ -155,5 +140,4 @@ training_module:
 
 # global options
 global_options:
-  seed: 789
   allow_tf32: false
