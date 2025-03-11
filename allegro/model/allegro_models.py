@@ -3,6 +3,7 @@ from e3nn import o3
 
 from nequip.data import AtomicDataDict
 from nequip.model import model_builder
+from nequip.model.utils import get_current_compile_mode, _COMPILE_TIME_AOTINDUCTOR_KEY
 from nequip.nn import (
     SequentialGraphNetwork,
     ScalarMLP,
@@ -21,8 +22,14 @@ from allegro.nn import (
     EdgewiseReduce,
     Allegro_Module,
 )
+from nequip.utils import RankedLogger
+from nequip.utils.versions import _TORCH_GE_2_6
+
 from hydra.utils import instantiate
-from typing import Sequence, Union, Optional, Dict
+from typing import Sequence, Union, Optional, Dict, Final
+
+
+logger = RankedLogger(__name__, rank_zero_only=True)
 
 
 @model_builder
@@ -155,6 +162,14 @@ def FullAllegroEnergyModel(
         irreps_in=scalar_embed_module.irreps_out,
     )
 
+    use_custom_kernel: Final[bool] = (
+        get_current_compile_mode() == _COMPILE_TIME_AOTINDUCTOR_KEY and _TORCH_GE_2_6
+    )
+    if use_custom_kernel:
+        logger.info(
+            "Allegro model will be built to use custom TP kernels wherever possible (i.e. when specific shape conditions are met and running on GPUs)."
+        )
+
     # === allegro module ===
     allegro = Allegro_Module(
         num_layers=num_layers,
@@ -171,6 +186,7 @@ def FullAllegroEnergyModel(
             "forward_weight_init": forward_normalize,
         },
         tp_path_channel_coupling=tp_path_channel_coupling,
+        tp_use_custom_kernels=use_custom_kernel,
         # best to use defaults for these
         weight_individual_irreps=weight_individual_irreps,
         scatter_features=scatter_features,

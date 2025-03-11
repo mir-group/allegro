@@ -26,6 +26,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         tensor_track_allowed_irreps: o3.Irreps,
         # optional hyperparameters:
         avg_num_neighbors: Optional[float] = None,
+        tp_use_custom_kernels: bool = False,
         tp_path_channel_coupling: bool = False,  # "p" mode default (True is "uuup" mode)
         weight_individual_irreps: bool = True,
         scatter_features: bool = True,
@@ -186,6 +187,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 # for backward normalization, it accounts for `index_select`
                 # NOTE: `avg_num_neighbors` is not `None` because of the assert earlier
                 scatter_factor=1.0 / math.sqrt(avg_num_neighbors),
+                use_custom_kernels=tp_use_custom_kernels,
             )
             self.tps.append(tp)
             # we extract the scalars from the first irrep of the tp
