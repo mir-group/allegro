@@ -1,0 +1,67 @@
+name: Run Tests
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+
+  tests:
+    runs-on: ${{ github.event.repository.private == true && 'self-hosted' || 'ubuntu-latest' }}
+    strategy:
+      matrix:
+        torch-version: [2.2.0, "2.*"]
+    container:
+      image: nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
+      options: --gpus all
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install Python
+      run: |
+        apt update && apt install -y python3 python3-pip
+        python3 -m pip install --upgrade pip
+    - name: Linting
+      run: |
+          pip install flake8==7.1.0 Flake8-pyproject black
+          flake8 allegro/ --count --show-source --statistics
+          black allegro/ --check
+    - name: Install git
+      run: |
+        apt install git -y
+    - name: Clone NequIP packages
+      uses: mir-group/nequip-gh-actions-private/clone@main
+      with:
+        package_names: "nequip"
+        ssh_keys: "${{ secrets.NEQUIP }}"
+        private_flag: "${{ github.event.repository.private && '-private' || '' }}"
+        branch: ${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name}}
+    - name: Install PyTorch
+      env:
+        TORCH: "${{ matrix.torch-version }}"
+      run: |
+        # use CPU only on GH runner
+        if [ "${{ github.event.repository.private }}" = "true" ]; then
+            pip install torch==${TORCH} --upgrade
+        else
+            pip install torch==${TORCH} --index-url https://download.pytorch.org/whl/cpu --upgrade
+        fi
+    - name: Install Test Dependencies
+      run: |
+        pip install setuptools wheel pytest pytest-xdist[psutil]
+        # install nequip packages
+        pip install --upgrade-strategy only-if-needed ./nequip
+        pip install --upgrade-strategy only-if-needed .
+    - name: Run tests
+      run: |
+        # See https://github.com/pytest-dev/pytest/issues/1075 for why we need to set PYTHONHASHSEED
+        PYTHONHASHSEED=0 pytest -n auto tests/
+    - name: Clean up temporary files
+      if: always()
+      run: |
+        rm -rf ./allegro
