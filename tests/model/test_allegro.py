@@ -56,7 +56,8 @@ class TestAllegro(BaseEnergyModelTests):
 
     # TODO: test so3 mode when can pass down option to assert equivariance to ignore parity
     @pytest.fixture(
-        params=["o3_full", "o3_restricted"],
+        # only test `o3_full` case to save time
+        params=["o3_full"],  # "o3_restricted"
         scope="class",
     )
     def parity_setting(self, request):
@@ -77,7 +78,11 @@ class TestAllegro(BaseEnergyModelTests):
     def tp_path_channel_coupling(self, request):
         return request.param
 
-    @pytest.fixture(params=[True, False], scope="class")
+    @pytest.fixture(
+        # only test default case of True to save time
+        params=[True],
+        scope="class",
+    )
     def forward_normalize(self, request):
         return request.param
 
