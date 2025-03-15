@@ -14,7 +14,7 @@ authors = [
     {name = "Simon Batzner"},
 ]
 dependencies = [
-    "nequip>=0.6.1",
+    "nequip>=0.7.0",
 ]
 
 [project.urls]
