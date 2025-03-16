@@ -81,6 +81,10 @@ def test_contract_kernel(
                 args_in=args_in,
                 irreps_in=[irreps_in1, irreps_in2, None, None],
                 irreps_out=irreps_out,
+                # e3nn uses 1e-3, 1e-9
+                tolerance={torch.float32: 1e-3, torch.float64: 1e-8}[
+                    torch.get_default_dtype()
+                ],
             )
 
         atol = {torch.float32: 1e-6, torch.float64: 1e-10}[torch.get_default_dtype()]
