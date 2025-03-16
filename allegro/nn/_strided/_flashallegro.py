@@ -126,7 +126,7 @@ def tensor_product_p_kernel(
             {"BLOCK_B": 8, "BLOCK_U": 8, "BLOCK_DIM": 16},
             num_warps=4,
             num_stages=3,
-            maxnreg=128,
+            maxnreg=128 if "nvidia" in torch.cuda.get_device_name(0).lower() else None,
         )
     ],
     key=["BATCH", "XDIM", "YDIM", "OUTDIM", "UMAX", "NNZ"],
