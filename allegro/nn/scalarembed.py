@@ -1,7 +1,7 @@
 from math import sqrt
 import torch
 
-from e3nn import o3
+from e3nn.o3._irreps import Irreps
 from e3nn.util.jit import compile_mode
 
 from nequip.data import AtomicDataDict
@@ -146,7 +146,7 @@ class TwoBodySplineScalarEmbed(GraphModuleMixin, torch.nn.Module):
         self._init_irreps(
             irreps_in=irreps_in,
             irreps_out={
-                self.scalar_embed_field: o3.Irreps([(module_output_dim, (0, 1))]),
+                self.scalar_embed_field: Irreps([(module_output_dim, (0, 1))]),
             },
         )
 

@@ -1,6 +1,7 @@
 import math
 import torch
-from e3nn import o3
+from e3nn.o3._irreps import Irreps
+from e3nn.o3._wigner import wigner_3j
 from nequip.nn import scatter
 from typing import List, Tuple, Optional
 
@@ -55,16 +56,16 @@ class Contracter(torch.nn.Module):
 
         # -- Irrep management --
         assert mul > 0
-        self.irreps_in1 = o3.Irreps(irreps_in1)
-        base_irreps1 = o3.Irreps((1, ir) for _, ir in self.irreps_in1)
+        self.irreps_in1 = Irreps(irreps_in1)
+        base_irreps1 = Irreps((1, ir) for _, ir in self.irreps_in1)
         dim1 = base_irreps1.dim
         assert all(m == 1 for m, ir in self.irreps_in1)
-        self.irreps_in2 = o3.Irreps(irreps_in2)
-        base_irreps2 = o3.Irreps((1, ir) for _, ir in self.irreps_in2)
+        self.irreps_in2 = Irreps(irreps_in2)
+        base_irreps2 = Irreps((1, ir) for _, ir in self.irreps_in2)
         dim2 = base_irreps2.dim
         assert all(m == 1 for m, ir in irreps_in2)
-        self.irreps_out = o3.Irreps(irreps_out)
-        base_irreps_out = o3.Irreps((1, ir) for _, ir in self.irreps_out)
+        self.irreps_out = Irreps(irreps_out)
+        base_irreps_out = Irreps((1, ir) for _, ir in self.irreps_out)
         dimout = base_irreps_out.dim
         assert all(m == 1 for m, ir in self.irreps_out)
         self.base_dim1 = dim1
@@ -89,7 +90,7 @@ class Contracter(torch.nn.Module):
             assert ir_in1.p * ir_in2.p == ir_out.p
             assert abs(ir_in1.l - ir_in2.l) <= ir_out.l <= ir_in1.l + ir_in2.l
 
-            this_w3j = o3.wigner_3j(ir_in1.l, ir_in2.l, ir_out.l)
+            this_w3j = wigner_3j(ir_in1.l, ir_in2.l, ir_out.l)
             this_w3j_index = this_w3j.nonzero()
             w3j_values.append(
                 this_w3j[

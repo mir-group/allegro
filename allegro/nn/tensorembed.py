@@ -1,6 +1,7 @@
 import torch
 
-from e3nn import o3
+from e3nn.o3._irreps import Irreps
+from e3nn.o3._spherical_harmonics import SphericalHarmonics
 from e3nn.util.jit import compile_mode
 
 from nequip.data import AtomicDataDict
@@ -27,7 +28,7 @@ class TwoBodySphericalHarmonicTensorEmbed(GraphModuleMixin, torch.nn.Module):
 
     def __init__(
         self,
-        irreps_edge_sh: Union[int, str, o3.Irreps],
+        irreps_edge_sh: Union[int, str, Irreps],
         num_tensor_features: int,
         forward_weight_init: bool = True,
         # bookkeeping args
@@ -47,10 +48,10 @@ class TwoBodySphericalHarmonicTensorEmbed(GraphModuleMixin, torch.nn.Module):
         self.tensor_embedding_out_field = tensor_embedding_out_field
 
         if isinstance(irreps_edge_sh, int):
-            irreps_edge_sh = o3.Irreps.spherical_harmonics(irreps_edge_sh)
+            irreps_edge_sh = Irreps.spherical_harmonics(irreps_edge_sh)
         else:
-            irreps_edge_sh = o3.Irreps(irreps_edge_sh)
-        self.sh = o3.SphericalHarmonics(
+            irreps_edge_sh = Irreps(irreps_edge_sh)
+        self.sh = SphericalHarmonics(
             irreps_edge_sh, edge_sh_normalize, edge_sh_normalization
         )
         self._init_irreps(

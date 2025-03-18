@@ -4,7 +4,7 @@ import functools
 
 import torch
 
-from e3nn import o3
+from e3nn.o3._irreps import Irrep, Irreps
 from e3nn.util.jit import compile_mode
 
 from nequip.data import AtomicDataDict
@@ -23,7 +23,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         num_layers: int,
         num_scalar_features: int,
         num_tensor_features: int,
-        tensor_track_allowed_irreps: o3.Irreps,
+        tensor_track_allowed_irreps: Irreps,
         # optional hyperparameters:
         avg_num_neighbors: Optional[float] = None,
         tp_use_custom_kernels: bool = False,
@@ -42,7 +42,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         irreps_in=None,
     ):
         super().__init__()
-        SCALAR = o3.Irrep("0e")  # define for convenience
+        SCALAR = Irrep("0e")  # define for convenience
 
         # === early sanity checks ===
         assert (
@@ -58,7 +58,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         self.num_scalar_features = num_scalar_features
         self.num_tensor_features = num_tensor_features
         self.scatter_features = scatter_features
-        self.tensor_track_allowed_irreps = o3.Irreps(tensor_track_allowed_irreps)
+        self.tensor_track_allowed_irreps = Irreps(tensor_track_allowed_irreps)
         assert set(mul for mul, ir in self.tensor_track_allowed_irreps) == {1}
 
         # == bookkeeping parameters ==
@@ -101,7 +101,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         self.latents = torch.nn.ModuleList([])
         self.tps = torch.nn.ModuleList([])
 
-        env_embed_irreps = o3.Irreps([(1, ir) for _, ir in input_irreps])
+        env_embed_irreps = Irreps([(1, ir) for _, ir in input_irreps])
         assert (
             env_embed_irreps[0].ir == SCALAR
         ), "env_embed_irreps must start with scalars"
@@ -116,13 +116,13 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             if layer_idx == self.num_layers - 1:
                 # ^ means we're doing the last layer
                 # No more TPs follow this, so only need scalars
-                ir_out = o3.Irreps([(1, (0, 1))])
+                ir_out = Irreps([(1, (0, 1))])
             else:
                 # allow everything allowed
                 ir_out = self.tensor_track_allowed_irreps
 
             # Prune impossible paths, leaving only allowed irreps that can be constructed:
-            ir_out = o3.Irreps(
+            ir_out = Irreps(
                 [
                     (mul, ir)
                     for mul, ir in ir_out
@@ -148,7 +148,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                         new_arg_irreps.append((mul, arg_ir))
                         # once its useful once, we keep it no matter what
                         break
-            new_arg_irreps = o3.Irreps(new_arg_irreps)
+            new_arg_irreps = Irreps(new_arg_irreps)
             new_tps_irreps.append(new_arg_irreps)
             out_irreps = new_arg_irreps
 
@@ -177,9 +177,9 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
 
             # note that we set the multiplicity as 1 because the strided layout is incompatible with e3nn's data format
             tp = Contracter(
-                irreps_in1=o3.Irreps([(1, ir) for _, ir in irin1]),
-                irreps_in2=o3.Irreps([(1, ir) for _, ir in irin2]),
-                irreps_out=o3.Irreps([(1, ir) for _, ir in out_irreps]),
+                irreps_in1=Irreps([(1, ir) for _, ir in irin1]),
+                irreps_in2=Irreps([(1, ir) for _, ir in irin2]),
+                irreps_out=Irreps([(1, ir) for _, ir in out_irreps]),
                 mul=self.num_tensor_features,
                 path_channel_coupling=tp_path_channel_coupling,
                 # `scatter_factor` is the same for both forward and backwards normalization
@@ -224,7 +224,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
 
         self.irreps_out.update(
             {
-                self.scalar_out_field: o3.Irreps(
+                self.scalar_out_field: Irreps(
                     [(self.num_scalar_features * (self.num_layers + 1), (0, 1))]
                 ),
             }
