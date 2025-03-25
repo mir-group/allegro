@@ -35,7 +35,7 @@ logger = RankedLogger(__name__, rank_zero_only=True)
 @model_builder
 def AllegroEnergyModel(
     l_max: int,
-    parity_setting: str,
+    parity_setting: str = "o3_full",
     **kwargs,
 ):
     assert parity_setting in ("o3_full", "o3_restricted", "so3")
@@ -62,7 +62,7 @@ def AllegroEnergyModel(
 
 @model_builder
 def AllegroModel(**kwargs):
-    """Allegro model that predicts energies and forces (and stresses if cell is provided).
+    r"""Allegro model that predicts energies and forces (and stresses if cell is provided).
 
     Args:
         seed (int): seed for reproducibility
@@ -70,18 +70,19 @@ def AllegroModel(**kwargs):
         r_max (float): cutoff radius
         per_edge_type_cutoff (Dict): one can optionally specify cutoffs for each edge type [must be smaller than ``r_max``] (default ``None``)
         type_names (Sequence[str]): list of atom type names
-        l_max (int): maximum order l to use in spherical harmonics embedding, 1 is baseline (fast), 2 is more accurate, but slower, 3 highly accurate but slow
-        parity_setting (str): parity symmetry equivariance setting -- options are ``o3_full``, ``o3_restricted``, ``so3``
+        l_max (int): maximum order :math:`\ell` to use in spherical harmonics embedding, 1 is baseline (fast), 2 is more accurate, but slower, 3 highly accurate but slow
+        parity_setting (str): parity symmetry equivariance setting, with options ``o3_full``, ``o3_restricted``, ``so3`` (default ``o3_full``)
         scalar_embed: an Allegro-compatible two-body scalar embedding module, e.g. ``allegro.nn.TwoBodyBesselScalarEmbed``
         scalar_embed_output_dim (int): output dimension of the scalar embedding module (default ``None`` will use ``num_scalar_features``)
         num_layers (int): number of Allegro layers
         num_scalar_features (int): multiplicity of scalar features in the Allegro layers
         num_tensor_features (int): multiplicity of tensor features in the Allegro layers
-        allegro_mlp_hidden_layers_depth (int): number of layers in MLPs used at each Allegro layer
-        allegro_mlp_hidden_layers_width (int): number of neurons per layer in MLPs used at each Allegro layer
+        allegro_mlp_hidden_layers_depth (int): number of hidden layers in the Allegro scalar MLPs
+        allegro_mlp_hidden_layers_width (int): width of hidden layers in the Allegro scalar MLPs
         allegro_mlp_nonlinearity (str): ``silu``, ``mish``, ``gelu``, or ``None`` (default ``silu``)
-        readout_mlp_hidden_layers_depth (int): number of layers in the readout MLP
-        readout_mlp_hidden_layers_width (int): number of neurons per layer in the readout MLP
+        tp_path_channel_coupling (bool): whether Allegro tensor product weights couple the paths with the channels or not, ``True`` is expected to be more expressive than ``False`` (default ``True``)
+        readout_mlp_hidden_layers_depth (int): number of hidden layers in the readout MLP
+        readout_mlp_hidden_layers_width (int): width of hidden layers in the readout MLP
         readout_mlp_nonlinearity (str): ``silu``, ``mish``, ``gelu``, or ``None`` (default ``None``)
         avg_num_neighbors (float): used to normalize edge sums for better numerics (default ``None``)
         per_type_energy_scales (float/List[float]): per-atom energy scales, which could be derived from the force RMS of the data (default ``None``)
@@ -111,6 +112,7 @@ def FullAllegroEnergyModel(
     allegro_mlp_hidden_layers_depth: int = 2,
     allegro_mlp_hidden_layers_width: int = 64,
     allegro_mlp_nonlinearity: Optional[str] = "silu",
+    tp_path_channel_coupling: bool = True,
     # readout
     readout_mlp_hidden_layers_depth: int = 2,
     readout_mlp_hidden_layers_width: int = 32,
@@ -118,7 +120,6 @@ def FullAllegroEnergyModel(
     # edge sum normalization
     avg_num_neighbors: Optional[float] = None,
     # allegro layers defaults
-    tp_path_channel_coupling: bool = False,
     weight_individual_irreps: bool = True,
     scatter_features: bool = False,
     # per atom energy params
