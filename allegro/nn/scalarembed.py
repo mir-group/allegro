@@ -37,18 +37,31 @@ def TwoBodyBesselScalarEmbed(
 
     The radial edge lengths are encoded with a Bessel basis, which is then projected to ``two_body_embedding_dim``.
     The center-neighbor atom types are embedded with weights to the same ``two_body_embedding_dim``.
-    The radial embedding and center-neighbor type embedding are multiplied (to impose that the embedding smoothly goes to zero at the cutoff).
-    The product then goes through a multilayer perception (``two_body_mlp``) to form a two-body scalar embedding (users shouldn't have to worry about the output dimesion -- that is handled internally by the model using this module).
+    The radial embedding and center-neighbor type embedding are multiplied and fed to a multilayer perception (``two_body_mlp``).
 
-    The following arguments are the ones that users should configure, the rest are used internally for composing this module into a model.
+    This module can be used for the ``scalar_embed`` argument of the ``AllegroModel`` in the config as follows.
+    ::
+
+      model:
+        _target_: allegro.model.AllegroModel
+        # other Allegro model parameters
+        scalar_embed:
+          _target_: allegro.nn.TwoBodyBesselScalarEmbed
+          num_bessels: 8
+          bessel_trainable: false
+          polynomial_cutoff_p: 6
+          two_body_embedding_dim: 32
+          two_body_mlp_hidden_layers_depth: 2
+          two_body_mlp_hidden_layers_width: 64
+          two_body_mlp_nonlinearity: silu
 
     Args:
-        num_bessels (int): number of Bessel basis functions
-        bessel_trainable (int): whether Bessel roots are trainable
-        polynomial_cutoff_p (int): p-exponent used in polynomial cutoff function, smaller p corresponds to stronger decay with distance
-        two_body_embedding_dim: int = 32,
-        two_body_mlp_hidden_layers_depth: int = 2,
-        two_body_mlp_hidden_layers_width: int = 64,
+        num_bessels (int): number of Bessel basis functions (default ``8``)
+        bessel_trainable (int): whether Bessel roots are trainable (default ``False``)
+        polynomial_cutoff_p (int): p-exponent used in polynomial cutoff function, smaller p corresponds to stronger decay with distance (default ``6``)
+        two_body_embedding_dim (int): intermediate embedding dimension before going through two-body MLP
+        two_body_mlp_hidden_layers_depth (int): number of hidden layers of two-body MLP
+        two_body_mlp_hidden_layers_width (int): depth of hidden layers of two-body MLP
         two_body_mlp_nonlinearity (str): ``silu``, ``mish``, ``gelu``, or ``None`` (default ``silu``)
     """
     # the following args are for internal use in model building:
@@ -93,10 +106,21 @@ def TwoBodyBesselScalarEmbed(
 
 @compile_mode("script")
 class TwoBodySplineScalarEmbed(GraphModuleMixin, torch.nn.Module):
-    r"""Two-body scalar embedding based on B-splines for every edge type (pair of center-neighbor types).
+    r"""Two-body spline scalar embedding.
+
+    This module can be used for the ``scalar_embed`` argument of the ``AllegroModel`` in the config as follows.
+    ::
+
+      model:
+        _target_: allegro.model.AllegroModel
+        # other Allegro model parameters
+        scalar_embed:
+          _target_: allegro.nn.TwoBodySplineScalarEmbed
+          num_splines: 16
+          spline_span: 12
 
     Args:
-        num_splines (int)  : number of spline basis functions
+        num_splines (int): number of spline basis functions
         spline_span (int): number of spline basis functions that overlap on spline grid centers
     """
 
@@ -105,7 +129,7 @@ class TwoBodySplineScalarEmbed(GraphModuleMixin, torch.nn.Module):
         type_names: Sequence[str],
         # spline params
         num_splines: int = 8,
-        spline_span: int = 3,
+        spline_span: int = 4,
         # model builder params
         module_output_dim: int = 64,
         forward_weight_init: bool = True,
