@@ -6,22 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Most recent change on the bottom.
 
-## Unreleased
+## [0.4.0]
 
-### Added
-- Allegro readout module
-- MLPs can be configured with `hidden_layer_depth` and `hidden_layer_width` as an alternative to an explicit `hidden_layer_dims` list
-
-### Changed
-- [Breaking] default `tensors_mixing_mode` = `p`
-- [Breaking] initial two-body embedding and `allegro` modules resturctured
-- [Breaking] MLP params use `hidden_layer` instead of `latent`
-
-### Removed
-- [Breaking] `latent_resent` (latents have access to concatenation of previous layers' latents by default)
-- [Breaking] remove `env_embed_mlp`
-- [Breaking] remove `tensors_mixing_mode` = `uuulin`
-- [Breaking] remove `self_edge_tensor_product` as a hyperparameter (fix behavior to be `self_edge_tensor_product=True`)
+[Breaking] Major breaking changes wrt previous versions due to significant restructuring and refactoring for compatibility with `nequip` 0.7.0. Model checkpoints from previous versions will not be compatible with this version.
 
 ## [0.3.0]
 ### Added
