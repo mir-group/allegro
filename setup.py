@@ -15,7 +15,7 @@ setup(
     description="Allegro is an open-source code for building highly scalable and accurate equivariant deep learning interatomic potentials.",
     python_requires=">=3.7",
     packages=find_packages(include=["allegro", "allegro.*"]),
-    install_requires=["nequip>=0.6.0"],
+    install_requires=["nequip>=0.6.1,<0.7.0"],
     zip_safe=True,
     entry_points={"nequip.extension": ["init_always = allegro"]},
 )
