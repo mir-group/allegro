@@ -9,7 +9,7 @@ version = version_dict["__version__"]
 del version_dict
 
 setup(
-    name="mir-allegro",
+    name="nequip-allegro",
     version=version,
     author="Albert Musaelian, Simon Batzner",
     description="Allegro is an open-source code for building highly scalable and accurate equivariant deep learning interatomic potentials.",
