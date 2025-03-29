@@ -1,0 +1,44 @@
+name: Upload Python Package
+
+on:
+  release:
+    types: [created]
+
+# ref: https://packaging.python.org/en/latest/guides/publishing-package-distribution-releases-using-github-actions-ci-cd-workflows/
+
+jobs:
+  build:
+    name: Build distribution
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: 3.9
+    - name: install dependencies, then build binary wheel and source tarball
+      run: |
+        python3 -m pip install build --user
+        python3 -m build
+    - name: store the distribution packages
+      uses: actions/upload-artifact@v4
+      with:
+        name: python-package-distributions
+        path: dist/
+
+  pypi-publish:
+    name: Upload release to PyPI
+    runs-on: ubuntu-latest
+    # Specifying a GitHub environment is optional, but strongly encouraged
+    environment: pypi
+    permissions:
+      # IMPORTANT: this permission is mandatory for Trusted Publishing
+      id-token: write
+    steps:
+      - name: download the distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+      - name: publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
