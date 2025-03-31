@@ -3,15 +3,14 @@ requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mir-allegro"
+name = "nequip-allegro"
 dynamic = ["version"]
 description = "Allegro is an open-source code for building highly scalable and accurate equivariant deep learning interatomic potentials."
 readme = "README.md"
 requires-python = ">=3.9"
 license = {file = "LICENSE"}
 authors = [
-    {name = "Albert Musealian"},
-    {name = "Simon Batzner"},
+    {name = "The NequIP Developers", email = "allegro-nequip@g.harvard.edu"},
 ]
 dependencies = [
     "nequip>=0.7.0",
