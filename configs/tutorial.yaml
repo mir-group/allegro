@@ -40,18 +40,19 @@ data:
           _target_: nequip.data.RootMeanSquare
         per_type: true
         name: per_type_forces_rms
-      
-train:
-  training_module: nequip.train.NequIPLightningModule
-  trainer:
-    _target_: lightning.Trainer
-    max_epochs: 5
-    check_val_every_n_epoch: 1
-    log_every_n_steps: 5
-    callbacks:
-      - _target_: lightning.pytorch.callbacks.ModelCheckpoint
-        dirpath: ${hydra:runtime.output_dir}
-        save_last: true
+
+trainer:
+  _target_: lightning.Trainer
+  max_epochs: 5
+  check_val_every_n_epoch: 1
+  log_every_n_steps: 5
+  callbacks:
+    - _target_: lightning.pytorch.callbacks.ModelCheckpoint
+      dirpath: ${hydra:runtime.output_dir}
+      save_last: true
+
+training_module:
+  _target_: nequip.train.NequIPLightningModule
   loss:
     _target_: nequip.train.MetricsManager
     metrics:
@@ -67,65 +68,65 @@ train:
         field: forces
         metric:
           _target_: nequip.train.RootMeanSquaredError
-  test_metrics: ${train.val_metrics}
+  test_metrics: ${training_module.val_metrics}
   optimizer:
     _target_: torch.optim.Adam
 
-model:
-  # -- network --
-  model_builders:
-   - allegro.model.Allegro
-   # the typical model builders from `nequip` can still be used:
-   - PerTypeEnergyScaleShift
-   - StressForceOutput
-   - RescaleEnergyEtc
+  model:
+    # -- network --
+    model_builders:
+     - allegro.model.Allegro
+     # the typical model builders from `nequip` can still be used:
+     - PerTypeEnergyScaleShift
+     - StressForceOutput
+     - RescaleEnergyEtc
+    
+    # bookkeeping
+    seed: 123
+    type_names: ${model_type_names}
+    model_dtype: float32
   
-  # bookkeeping
-  seed: 123
-  type_names: ${model_type_names}
-  model_dtype: float32
-
-  # cutoffs
-  r_max: ${cutoff_radius}
-
-  # radial basis
-  BesselBasis_trainable: true
-  PolynomialCutoff_p: 6   
-  num_bessels_per_basis: 8
-
-  # symmetry
-  l_max: 1
-  parity: o3_full   
+    # cutoffs
+    r_max: ${cutoff_radius}
   
-  # Allegro layers:
-  num_layers: 1
-  num_tensor_features: 8
+    # radial basis
+    BesselBasis_trainable: true
+    PolynomialCutoff_p: 6   
+    num_bessels_per_basis: 8
   
-  two_body_latent_mlp_latent_dimensions: [32, 64, 128]
-  two_body_latent_mlp_nonlinearity: silu
-  two_body_latent_mlp_initialization: uniform
-  
-  latent_mlp_latent_dimensions: [128, 128]
-  latent_mlp_nonlinearity: silu
-  latent_mlp_initialization: uniform
-  latent_resnet: true
-  
-  env_embed_mlp_latent_dimensions: []
-  env_embed_mlp_nonlinearity: null
-  env_embed_mlp_initialization: uniform
-  
-  # - end allegro layers -
-  
-  # Final MLP to go from Allegro latent space to edge energies:
-  edge_eng_mlp_latent_dimensions: [32]
-  edge_eng_mlp_nonlinearity: null
-  edge_eng_mlp_initialization: uniform
-  
-  # variables derived from dataset statistics
-  per_type_energy_scale_shift_shifts: ${training_data_stats:per_atom_energy_mean}
-  per_type_energy_scale_shift_scales: ${training_data_stats:per_type_forces_rms} #null
-  global_rescale_scale: null #${training_data_stats:forces_rms}
-  avg_num_neighbors: ${training_data_stats:num_neighbors_mean}
+    # symmetry
+    l_max: 1
+    parity: o3_full   
+    
+    # Allegro layers:
+    num_layers: 1
+    num_tensor_features: 8
+    
+    two_body_latent_mlp_latent_dimensions: [32, 64, 128]
+    two_body_latent_mlp_nonlinearity: silu
+    two_body_latent_mlp_initialization: uniform
+    
+    latent_mlp_latent_dimensions: [128, 128]
+    latent_mlp_nonlinearity: silu
+    latent_mlp_initialization: uniform
+    latent_resnet: true
+    
+    env_embed_mlp_latent_dimensions: []
+    env_embed_mlp_nonlinearity: null
+    env_embed_mlp_initialization: uniform
+    
+    # - end allegro layers -
+    
+    # Final MLP to go from Allegro latent space to edge energies:
+    edge_eng_mlp_latent_dimensions: [32]
+    edge_eng_mlp_nonlinearity: null
+    edge_eng_mlp_initialization: uniform
+    
+    # variables derived from dataset statistics
+    per_type_energy_scale_shift_shifts: ${training_data_stats:per_atom_energy_mean}
+    per_type_energy_scale_shift_scales: ${training_data_stats:per_type_forces_rms} #null
+    global_rescale_scale: null #${training_data_stats:forces_rms}
+    avg_num_neighbors: ${training_data_stats:num_neighbors_mean}
   
 # global options
 global_options:
