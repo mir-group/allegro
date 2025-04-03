@@ -72,7 +72,10 @@ def AllegroModel(**kwargs):
         type_names (Sequence[str]): list of atom type names
         l_max (int): maximum order :math:`\ell` to use in spherical harmonics embedding, 1 is baseline (fast), 2 is more accurate, but slower, 3 highly accurate but slow
         parity_setting (str): parity symmetry equivariance setting, with options ``o3_full`` or ``o3_restricted`` (default ``o3_full``)
-        scalar_embed: an Allegro-compatible two-body scalar embedding module, e.g. ``allegro.nn.TwoBodyBesselScalarEmbed``
+        radial_chemical_embed: an Allegro-compatible two-body radial-chemical embedding module, e.g. ``allegro.nn.TwoBodyBesselScalarEmbed``
+        two_body_mlp_hidden_layers_depth (int): number of hidden layers of two-body MLP (default ``1``)
+        two_body_mlp_hidden_layers_width (int): depth of hidden layers of two-body MLP
+        two_body_mlp_nonlinearity (str): ``silu``, ``mish``, ``gelu``, or ``None`` (default ``silu``)
         scalar_embed_output_dim (int): output dimension of the scalar embedding module (default ``None`` will use ``num_scalar_features``)
         num_layers (int): number of Allegro layers
         num_scalar_features (int): multiplicity of scalar features in the Allegro layers
@@ -102,9 +105,14 @@ def FullAllegroEnergyModel(
     irreps_edge_sh: Union[int, str, o3.Irreps],
     tensor_track_allowed_irreps: Union[str, o3.Irreps],
     # scalar embed
-    scalar_embed: Dict,
-    scalar_embed_output_dim: Optional[int] = None,
+    radial_chemical_embed: Dict,
+    radial_chemical_embed_dim: Optional[int] = None,
     per_edge_type_cutoff: Optional[Dict[str, Union[float, Dict[str, float]]]] = None,
+    # scalar embed MLP
+    scalar_embed_mlp_hidden_layers_depth: int = 1,
+    scalar_embed_mlp_hidden_layers_width: int = 64,
+    scalar_embed_mlp_nonlinearity: int = "silu",
+    scalar_embed_dim: Optional[int] = None,
     # allegro layers
     num_layers: int = 2,
     num_scalar_features: int = 64,
@@ -137,13 +145,13 @@ def FullAllegroEnergyModel(
         type_names=type_names,
         per_edge_type_cutoff=per_edge_type_cutoff,
     )
-    scalar_embed_module = instantiate(
-        scalar_embed,
+    radial_chemical_embed_module = instantiate(
+        radial_chemical_embed,
         type_names=type_names,
         module_output_dim=(
             num_scalar_features
-            if scalar_embed_output_dim is None
-            else scalar_embed_output_dim
+            if radial_chemical_embed_dim is None
+            else radial_chemical_embed_dim
         ),
         forward_weight_init=forward_normalize,
         scalar_embed_field=AtomicDataDict.EDGE_EMBEDDING_KEY,
@@ -151,6 +159,20 @@ def FullAllegroEnergyModel(
     )
     # ^ note that this imposes a contract with two-body scalar embedding modules
     # i.e. they must have `type_names`, `module_output_dim`, `scalar_embed_field`, `irreps_in`
+
+    scalar_embed_mlp = ScalarMLP(
+        output_dim=(
+            num_scalar_features if scalar_embed_dim is None else scalar_embed_dim
+        ),
+        hidden_layers_depth=scalar_embed_mlp_hidden_layers_depth,
+        hidden_layers_width=scalar_embed_mlp_hidden_layers_width,
+        nonlinearity=scalar_embed_mlp_nonlinearity,
+        bias=False,
+        forward_weight_init=forward_normalize,
+        field=AtomicDataDict.EDGE_EMBEDDING_KEY,
+        out_field=AtomicDataDict.EDGE_EMBEDDING_KEY,
+        irreps_in=radial_chemical_embed_module.irreps_out,
+    )
 
     # === two-body tensor embedding ===
     tensor_embed = TwoBodySphericalHarmonicTensorEmbed(
@@ -160,7 +182,7 @@ def FullAllegroEnergyModel(
         scalar_embedding_in_field=AtomicDataDict.EDGE_EMBEDDING_KEY,
         tensor_basis_out_field=AtomicDataDict.EDGE_ATTRS_KEY,
         tensor_embedding_out_field=AtomicDataDict.EDGE_FEATURES_KEY,
-        irreps_in=scalar_embed_module.irreps_out,
+        irreps_in=scalar_embed_mlp.irreps_out,
     )
 
     use_custom_kernel: Final[bool] = (
@@ -203,7 +225,8 @@ def FullAllegroEnergyModel(
 
     modules = {
         "edge_norm": edge_norm,
-        "scalar_embed": scalar_embed_module,
+        "radial_chemical_embed": radial_chemical_embed_module,
+        "scalar_embed_mlp": scalar_embed_mlp,
         "tensor_embed": tensor_embed,
         "allegro": allegro,
     }

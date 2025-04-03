@@ -6,14 +6,14 @@ from e3nn.o3._irreps import Irreps
 from e3nn.util.jit import compile_mode
 
 from nequip.data import AtomicDataDict
-from nequip.nn import GraphModuleMixin, SequentialGraphNetwork, ScalarMLP
+from nequip.nn import GraphModuleMixin, SequentialGraphNetwork
 from nequip.nn.embedding import PolynomialCutoff, BesselEdgeLengthEncoding
 from nequip.utils.global_dtype import _GLOBAL_DTYPE
 
 from ._edgeembed import ProductTypeEmbedding
 from .spline import PerClassSpline
 
-from typing import Sequence, Optional
+from typing import Sequence
 
 
 def TwoBodyBesselScalarEmbed(
@@ -22,11 +22,6 @@ def TwoBodyBesselScalarEmbed(
     num_bessels: int = 8,
     bessel_trainable: bool = False,
     polynomial_cutoff_p: int = 6,
-    # two body MLP
-    two_body_embedding_dim: int = 32,
-    two_body_mlp_hidden_layers_depth: int = 1,
-    two_body_mlp_hidden_layers_width: int = 64,
-    two_body_mlp_nonlinearity: Optional[str] = "silu",
     # model builder params
     module_output_dim: int = 64,
     forward_weight_init: bool = True,
@@ -38,7 +33,7 @@ def TwoBodyBesselScalarEmbed(
 
     The radial edge lengths are encoded with a Bessel basis, which is then projected to ``two_body_embedding_dim``.
     The center-neighbor atom types are embedded with weights to the same ``two_body_embedding_dim``.
-    The radial embedding and center-neighbor type embedding are multiplied and fed to a multilayer perception (``two_body_mlp``).
+    The radial embedding and center-neighbor type embedding are multiplied.
 
     This module can be used for the ``scalar_embed`` argument of the ``AllegroModel`` in the config as follows.
     ::
@@ -51,19 +46,11 @@ def TwoBodyBesselScalarEmbed(
           num_bessels: 8
           bessel_trainable: false
           polynomial_cutoff_p: 6
-          two_body_embedding_dim: 32
-          two_body_mlp_hidden_layers_depth: 1
-          two_body_mlp_hidden_layers_width: 64
-          two_body_mlp_nonlinearity: silu
 
     Args:
         num_bessels (int): number of Bessel basis functions (default ``8``)
         bessel_trainable (int): whether Bessel roots are trainable (default ``False``)
         polynomial_cutoff_p (int): p-exponent used in polynomial cutoff function, smaller p corresponds to stronger decay with distance (default ``6``)
-        two_body_embedding_dim (int): intermediate embedding dimension before going through two-body MLP
-        two_body_mlp_hidden_layers_depth (int): number of hidden layers of two-body MLP (default ``1``)
-        two_body_mlp_hidden_layers_width (int): depth of hidden layers of two-body MLP
-        two_body_mlp_nonlinearity (str): ``silu``, ``mish``, ``gelu``, or ``None`` (default ``silu``)
     """
     # the following args are for internal use in model building:
     # `type_names`, `module_output_dim`, `scalar_embed_field`, `irreps_in`
@@ -78,29 +65,17 @@ def TwoBodyBesselScalarEmbed(
     )
     type_embed = ProductTypeEmbedding(
         type_names=type_names,
-        initial_embedding_dim=two_body_embedding_dim,
+        initial_embedding_dim=module_output_dim,
         forward_weight_init=forward_weight_init,
         radial_features_in_field=scalar_embed_field,
         edge_embed_out_field=scalar_embed_field,
         irreps_in=bessel_encode.irreps_out,
     )
 
-    twobody_mlp = ScalarMLP(
-        # input dims from previous module
-        field=scalar_embed_field,
-        output_dim=module_output_dim,
-        hidden_layers_depth=two_body_mlp_hidden_layers_depth,
-        hidden_layers_width=two_body_mlp_hidden_layers_width,
-        nonlinearity=two_body_mlp_nonlinearity,
-        forward_weight_init=forward_weight_init,
-        irreps_in=type_embed.irreps_out,
-    )
-
     return SequentialGraphNetwork(
         {
             "bessel_encode": bessel_encode,
             "type_embed": type_embed,
-            "twobody_mlp": twobody_mlp,
         }
     )
 
