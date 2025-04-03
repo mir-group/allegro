@@ -8,6 +8,9 @@ Most recent change on the bottom.
 
 ## [0.4.1]
 
+### Changed
+- [Breaking] refactored scalar MLP out of Bessel embedding
+
 ### Removed
 - [Breaking] `so3` argument for `parity_setting` (only `o3_full` and `o3_restricted` allowed now)
 

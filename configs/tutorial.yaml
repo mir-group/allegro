@@ -73,19 +73,23 @@ training_module:
     r_max: ${cutoff_radius}
 
     # === two-body scalar embedding ===
-    scalar_embed:
+    radial_chemical_embed:
       _target_: allegro.nn.TwoBodyBesselScalarEmbed
       num_bessels: 8
       bessel_trainable: false
       polynomial_cutoff_p: 6
-      two_body_embedding_dim: ${num_scalar_features}
-      two_body_mlp_hidden_layers_depth: 1
-      two_body_mlp_hidden_layers_width: ${num_scalar_features}
-      two_body_mlp_nonlinearity: silu
+
+    # output dimension of the radial-chemical embedding
+    radial_chemical_embed_dim: ${num_scalar_features}
+
+    # scalar embedding MLP
+    scalar_embed_mlp_hidden_layers_depth: 1
+    scalar_embed_mlp_hidden_layers_width: ${num_scalar_features}
+    scalar_embed_mlp_nonlinearity: silu
 
     # one could explicitly specify the initial scalar embedding's output dimension
-    # if `scalar_embed_output_dim` is not provided (or `null`), Allegro will use `num_scalar_features` in its place
-    # scalar_embed_output_dim: 256
+    # if `scalar_embed_dim` is not provided (or `null`), Allegro will use `num_scalar_features` in its place
+    # scalar_embed_dim: 256
 
     # === core hyperparameters ===
     # The following hyperparameters are the main ones that one should focus on tuning.
