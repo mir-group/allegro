@@ -1,3 +1,4 @@
+# This file is a part of the `allegro` package. Please see LICENSE and README at the root for information on using it.
 def to_int_list(arg):
     # converts str: "64 64 64" to List[int]: [64, 64, 64]
     # or int: 64 to List[int]: [64]

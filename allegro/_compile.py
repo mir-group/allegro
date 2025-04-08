@@ -1,3 +1,4 @@
+# This file is a part of the `allegro` package. Please see LICENSE and README at the root for information on using it.
 import torch
 from nequip.data import AtomicDataDict
 from nequip.scripts._compile_utils import (
