@@ -38,25 +38,22 @@ trainer:
       save_last: true
 
 training_module:
-  _target_: nequip.train.NequIPLightningModule
+  _target_: nequip.train.EMALightningModule
   loss:
-    _target_: nequip.train.MetricsManager
-    metrics:
-      - name: force_MSE
-        field: forces
-        coeff: 1
-        metric:
-          _target_: nequip.train.MeanSquaredError
-  val_metrics: 
-    _target_: nequip.train.MetricsManager
-    metrics:
-      - name: force_RMSE
-        field: forces
-        metric:
-          _target_: nequip.train.RootMeanSquaredError
+    _target_: nequip.train.EnergyForceLoss
+    per_atom_energy: true
+    coeffs:
+      total_energy: 1.0
+      forces: 1.0
+  val_metrics:
+    _target_: nequip.train.EnergyForceMetrics
+    coeffs:
+      per_atom_energy_mae: 1.0
+      forces_mae: 1.0
   test_metrics: ${training_module.val_metrics}
   optimizer:
     _target_: torch.optim.Adam
+    lr: 0.001
 
   model:
     _target_: allegro.model.AllegroModel
@@ -98,23 +95,24 @@ training_module:
     # == allegro layers ==
     # number of tensor product layers, 1-3 usually best, more is more accurate but slower
     num_layers: 2
-    
+
     # number of scalar features, more is more accurate but slower
     # powers of two (4, 8, 16, 64, 128, 256, 512, ...) are good options to try depending on data set
     num_scalar_features: 64
-    
+
     # number of tensor features, more is more accurate but slower
     # powers of two (4, 8, 16, 64, 128, ...) are good options to try depending on data set
     num_tensor_features: 32
 
     # whether the tensor product weights couple the paths and channels or not (otherwise the weights are only applied per-path)
-    # default is `false`, `true` may be useful for larger `l_max` and `num_layers` where there are more paths
+    # default is `true`, which is expected to be more expressive than `false`
     tp_path_channel_coupling: false
 
     # neural network parameters in the Allegro layers
     allegro_mlp_hidden_layers_depth: 2
     allegro_mlp_hidden_layers_width: 128
     allegro_mlp_nonlinearity: silu
+    # ^ setting `nonlinearity` to `null` means that the Allegro MLPs are effectively linear layers
 
     # == readout ==
     # neural network parameters in the readout layer
@@ -128,7 +126,7 @@ training_module:
 
     # == per-type per-atom scales and shifts ==
     per_type_energy_shifts: ${training_data_stats:per_atom_energy_mean}
-    per_type_energy_scales: ${training_data_stats:per_type_forces_rms}
+    per_type_energy_scales: ${training_data_stats:forces_rms}
     per_type_energy_scales_trainable: false
     per_type_energy_shifts_trainable: false
 
