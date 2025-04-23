@@ -21,6 +21,8 @@ In particular, `allegro` implements the Allegro model as an **extension package*
  - [References & citing](#references--citing)
  - [Community, contact, questions, and contributing](#community-contact-questions-and-contributing)
 
+> [!IMPORTANT]
+> A [major backwards-incompatible update](https://nequip.readthedocs.io/en/latest/guide/upgrading.html) to the `nequip` framework was released on April 23rd 2025 as version v0.7.0. The corresponding `allegro` version is v0.4.0. Previous versions of Allegro remain available if needed in the GitHub Releases and must be used with older versions of `nequip`.
 
 ## Installation
 
