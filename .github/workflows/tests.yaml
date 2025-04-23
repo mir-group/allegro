@@ -34,13 +34,6 @@ jobs:
     - name: Install git
       run: |
         apt install git -y
-    - name: Clone NequIP packages
-      uses: mir-group/nequip-gh-actions-private/clone@main
-      if: github.event.repository.private == true
-      with:
-        package_names: "nequip"
-        ssh_keys: "${{ secrets.NEQUIP }}"
-        branch: ${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name}}
     - name: Clone NequIP packages GitHub
       if: github.event.repository.private == false
       run: |
