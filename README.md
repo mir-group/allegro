@@ -1,72 +1,94 @@
+<center>
+
+<img src="./logo.png" width="50%" title="Allegro" alt="Allegro"/> 
+
+<br/>
+
+[![PyPI version](https://img.shields.io/pypi/v/nequip-allegro.svg)](https://pypi.python.org/pypi/nequip-allegro/)
+
+</center>
+
 # Allegro
 
-This package implements the Allegro E(3)-equivariant machine-learning interatomic potential (https://arxiv.org/abs/2204.05249).
+This package implements the [Allegro E(3)-equivariant machine learning interatomic potential](https://www.nature.com/articles/s41467-023-36329-y).
 
-**:red_circle: PLEASE NOTE :red_circle:**:  Please note that a major update to this code is in the final stages of development and as a result support for the current release is a lower priority.
+In particular, `allegro` implements the Allegro model as an **extension package** for the [NequIP framework](https://github.com/mir-group/nequip).
 
-![Allegro logo](./logo.png)
-
-In particular, `allegro` implements the Allegro model as an **extension package** to the [NequIP package](https://github.com/mir-group/nequip).
+ - [Installation](#installation)
+ - [Tutorial](#tutorial)
+ - [Usage](#usage)
+ - [LAMMPS Integration](#lammps-integration)
+ - [References & citing](#references--citing)
+ - [Community, contact, questions, and contributing](#community-contact-questions-and-contributing)
 
 
 ## Installation
-**Please note that this package CANNOT be installed from PyPI as `pip install allegro`.**
 
-`allegro` requires the `nequip` package and its dependencies; please see the [NequIP installation instructions](https://github.com/mir-group/nequip#installation) for details.
+`allegro` requires the `nequip` package. Details on `nequip` and its required PyTorch versions can be found in [the `nequip` docs](https://nequip.readthedocs.io).
 
-Once `nequip` is installed, you can install `allegro` from source by running:
+`allegro` can be installed from PyPI (note that it is known as `nequip-allegro` on PyPI):
 ```bash
-git clone --depth 1 https://github.com/mir-group/allegro.git
-cd allegro
-pip install .
+pip install nequip-allegro
 ```
+Installing `allegro` in this way will also install the `nequip` package.
+
 
 ## Tutorial
-The best way to learn how to use Allegro is through the [Colab Tutorial](https://colab.research.google.com/drive/1yq2UwnET4loJYg_Fptt9kpklVaZvoHnq). This will run entirely on Google's cloud virtual machine, you do not need to install or run anything locally.
+The best way to learn how to use Allegro is through the [tutorial notebook](https://colab.research.google.com/drive/1yq2UwnET4loJYg_Fptt9kpklVaZvoHnq). This will run entirely on Google Colab's cloud virtual machine and you do not need to install or run anything locally.
 
 ## Usage
-Allegro models are trained, evaluated, deployed, etc. identically to NequIP models using the `nequip-*` commands. See the [NequIP README](https://github.com/mir-group/nequip#usage) for details.
 
-The key difference between using an Allegro and NequIP model is in the options used to define the model. We provide two Allegro config files analogous to those in `nequip`:
- - [`configs/minimal.yaml`](`configs/minimal.yaml`): A minimal example of training a toy model on force data.
- - [`configs/example.yaml`](`configs/example.yaml`): Training a more realistic model on forces and energies. **Start here for real models!**
+The `allegro` package provides the Allegro model for use within the [NequIP framework](https://github.com/mir-group/nequip). [The framework's documentation](https://nequip.readthedocs.io) describes how  to train, test, and use models.
+A minimal example of a config file for training an Allegro model is provided at [`configs/tutorial.yaml`](configs/tutorial.yaml).
 
-The key option that tells `nequip` to build an Allegro model is the `model_builders` option, which we set to:
-```yaml
-model_builders:
- - allegro.model.Allegro
- # the typical model builders from `nequip` are still used to wrap the core Allegro energy model:
- - PerSpeciesRescale
- - ForceOutput
- - RescaleEnergyEtc
-```
 
 ## LAMMPS Integration
 
-We offer a LAMMPS plugin [`pair_allegro`](https://github.com/mir-group/pair_allegro) to use Allegro models in LAMMPS simulations, including support for Kokkos acceleration and MPI and parallel simulations. Please see the [`pair_allegro`](https://github.com/mir-group/pair_allegro) repository for more details.
+We offer a LAMMPS plugin [`pair_allegro`](https://github.com/mir-group/pair_nequip_allegro) to use Allegro models in LAMMPS simulations, including support for Kokkos acceleration, MPI, and parallel multi-GPU simulations.
 
-## References and citing
 
-The Allegro model and the theory behind it is described in our pre-print:
+## References & citing
 
-> *Learning Local Equivariant Representations for Large-Scale Atomistic Dynamics* <br/>
-> Albert Musaelian, Simon Batzner, Anders Johansson, Lixin Sun, Cameron J. Owen, Mordechai Kornbluth, Boris Kozinsky <br/>
-> https://arxiv.org/abs/2204.05249 <br/>
-> https://doi.org/10.48550/arXiv.2204.05249
+**Any and all use of this software, in whole or in part, should clearly acknowledge and link to this repository.**
 
-The implementation of Allegro is built on NequIP [1], our framework for E(3)-equivariant interatomic potentials, and e3nn, [2] a general framework for building E(3)-equivariant neural networks. If you use this repository in your work, please consider citing the NequIP code [1] and e3nn [3] as well:
+If you use this code in your academic work, please cite:
 
- 1. https://github.com/mir-group/nequip
- 2. https://e3nn.org
- 3. https://doi.org/10.5281/zenodo.3724963
+ 1. The [Allegro paper](https://www.nature.com/articles/s41467-023-36329-y)
+    > Albert Musaelian, Simon Batzner, Anders Johansson, Lixin Sun, Cameron J. Owen, Mordechai Kornbluth, and Boris Kozinsky. <br/>
+    > "Learning local equivariant representations for large-scale atomistic dynamics." <br/>
+    > Nature Communications 14, no. 1 (2023): 579
 
-## Contact, questions, and contributing
+ 2. The [preprint describing the NequIP software framework and Allegro's performance within it](https://arxiv.org/abs/2504.16068)
+    > Chuin Wei Tan, Marc L. Descoteaux, Mit Kotak, Gabriel de Miranda Nascimento, Seán R. Kavanagh, Laura Zichi, Menghang Wang, Aadit Saluja, Yizhong R. Hu, Tess Smidt, Anders Johansson, William C. Witt, Boris Kozinsky, Albert Musaelian. <br/>
+    > "High-performance training and inference for deep equivariant interatomic potentials." <br/>
+    > https://doi.org/10.48550/arXiv.2504.16068
 
-We can be reached by email at allegro-nequip@g.harvard.edu.
+ 3. The [computational scaling paper](https://dl.acm.org/doi/abs/10.1145/3581784.3627041) that discusses optimized LAMMPS MD 
+    > Albert Musaelian, Anders Johansson, Simon Batzner, and Boris Kozinsky. <br/>
+    > "Scaling the leading accuracy of deep equivariant models to biomolecular simulations of realistic size." <br/>
+    > In Proceedings of the International Conference for High Performance Computing, Networking, Storage and Analysis, pp. 1-12. 2023.
+
+And also consider citing:
+ 
+ 4. The [original NequIP paper](https://www.nature.com/articles/s41467-022-29939-5)
+    > Simon Batzner, Albert Musaelian, Lixin Sun, Mario Geiger, Jonathan P. Mailoa, Mordechai Kornbluth, Nicola Molinari, Tess E. Smidt, and Boris Kozinsky. <br/>
+    > "E(3)-equivariant graph neural networks for data-efficient and accurate interatomic potentials." <br/>
+    > Nature communications 13, no. 1 (2022): 2453
+    
+ 5. The `e3nn` equivariant neural network package used by NequIP, through its [preprint](https://arxiv.org/abs/2207.09453) and/or [code](https://github.com/e3nn/e3nn)
+
+
+## Community, contact, questions, and contributing
 
 If you find a bug or have a proposal for a feature, please post it in the [Issues](https://github.com/mir-group/allegro/issues).
-If you have a question, topic, or issue that isn't obviously one of those, try our [GitHub Disucssions](https://github.com/mir-group/allegro/discussions).
+If you have a self-contained question or other discussion topic, try our [GitHub Disucssions](https://github.com/mir-group/allegro/discussions).
 
-**If your post is related to the general NequIP framework/package, please post in the issues/discussion on [that repository](https://github.com/mir-group/nequip).** Discussions on this repository should be specific to the `allegro` package and Allegro model.
+**If your post is related to the NequIP software framework in general, please post in the issues or discussions on [that repository](https://github.com/mir-group/nequip).** Discussions on this repository should be specific to the `allegro` package and Allegro model.
 
-If you want to contribute to the code, please read [`CONTRIBUTING.md`](https://github.com/mir-group/nequip/blob/main/CONTRIBUTING.md) from the `nequip` repository; this repository follows all the same processes.
+Active users and interested developers are invited to join us on the NequIP community chat server, which is hosted on the excellent [Zulip](https://zulip.com/) software.
+Zulip is organized a little bit differently than chat software like Slack or Discord that you may be familiar with: please review [their introduction](https://zulip.com/help/introduction-to-topics) before posting.
+[Register for the NequIP community here](https://nequip.zulipchat.com).
+
+If you want to contribute to the code, please read [`CONTRIBUTING.md`](https://github.com/mir-group/nequip/blob/main/docs/dev/contributing.md) from the `nequip` repository; this repository follows the same processes.
+
+We can also be reached by email at allegro-nequip@g.harvard.edu.
