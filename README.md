@@ -15,7 +15,6 @@ This package implements the [Allegro E(3)-equivariant machine learning interatom
 In particular, `allegro` implements the Allegro model as an **extension package** for the [NequIP framework](https://github.com/mir-group/nequip).
 
  - [Installation](#installation)
- - [Tutorial](#tutorial)
  - [Usage](#usage)
  - [LAMMPS Integration](#lammps-integration)
  - [References & citing](#references--citing)
@@ -33,10 +32,6 @@ In particular, `allegro` implements the Allegro model as an **extension package*
 pip install nequip-allegro
 ```
 Installing `allegro` in this way will also install the `nequip` package.
-
-
-## Tutorial
-The best way to learn how to use Allegro is through the [tutorial notebook](https://colab.research.google.com/drive/1yq2UwnET4loJYg_Fptt9kpklVaZvoHnq). This will run entirely on Google Colab's cloud virtual machine and you do not need to install or run anything locally.
 
 ## Usage
 
