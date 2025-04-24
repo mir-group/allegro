@@ -1,5 +1,6 @@
 # This file is a part of the `allegro` package. Please see LICENSE and README at the root for information on using it.
 import math
+import torch
 from e3nn import o3
 
 from nequip.data import AtomicDataDict
@@ -165,7 +166,9 @@ def FullAllegroEnergyModel(
     )
 
     use_custom_kernel: Final[bool] = (
-        get_current_compile_mode() == _COMPILE_TIME_AOTINDUCTOR_KEY and _TORCH_GE_2_6
+        get_current_compile_mode() == _COMPILE_TIME_AOTINDUCTOR_KEY
+        and _TORCH_GE_2_6
+        and torch.cuda.is_available()
     )
     if use_custom_kernel:
         logger.info(
