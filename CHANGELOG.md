@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Most recent change on the bottom.
 
+## [0.4.1]
+
+### Removed
+- [Breaking] `so3` argument for `parity_setting` (only `o3_full` and `o3_restricted` allowed now)
+
 ## [0.4.0]
 
 [Breaking] Major breaking changes wrt previous versions due to significant restructuring and refactoring for compatibility with `nequip` 0.7.0. Model checkpoints from previous versions will not be compatible with this version.

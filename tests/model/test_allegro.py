@@ -54,7 +54,6 @@ class TestAllegro(BaseEnergyModelTests):
     def scalar_embed_config(self, request):
         return request.param
 
-    # TODO: test so3 mode when can pass down option to assert equivariance to ignore parity
     @pytest.fixture(
         # only test `o3_full` case to save time
         params=["o3_full"],  # "o3_restricted"

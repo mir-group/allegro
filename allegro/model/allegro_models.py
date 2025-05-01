@@ -40,10 +40,8 @@ def AllegroEnergyModel(
     parity_setting: str = "o3_full",
     **kwargs,
 ):
-    assert parity_setting in ("o3_full", "o3_restricted", "so3")
-    irreps_edge_sh = repr(
-        o3.Irreps.spherical_harmonics(l_max, p=(1 if parity_setting == "so3" else -1))
-    )
+    assert parity_setting in ("o3_full", "o3_restricted")
+    irreps_edge_sh = repr(o3.Irreps.spherical_harmonics(l_max, p=-1))
     # set tensor_track_allowed_irreps
     # note that it is treated as a set, so order doesn't really matter
     if parity_setting == "o3_full":
@@ -52,7 +50,7 @@ def AllegroEnergyModel(
             [(1, (this_l, p)) for this_l in range(l_max + 1) for p in (1, -1)]
         )
     else:
-        # for so3 or o3_restricted, we want only irreps that show up in the original SH
+        # o3_restricted, we want only irreps that show up in the original SH
         tensor_track_allowed_irreps = irreps_edge_sh
 
     return FullAllegroEnergyModel(
@@ -73,7 +71,7 @@ def AllegroModel(**kwargs):
         per_edge_type_cutoff (Dict): one can optionally specify cutoffs for each edge type [must be smaller than ``r_max``] (default ``None``)
         type_names (Sequence[str]): list of atom type names
         l_max (int): maximum order :math:`\ell` to use in spherical harmonics embedding, 1 is baseline (fast), 2 is more accurate, but slower, 3 highly accurate but slow
-        parity_setting (str): parity symmetry equivariance setting, with options ``o3_full``, ``o3_restricted``, ``so3`` (default ``o3_full``)
+        parity_setting (str): parity symmetry equivariance setting, with options ``o3_full`` or ``o3_restricted`` (default ``o3_full``)
         scalar_embed: an Allegro-compatible two-body scalar embedding module, e.g. ``allegro.nn.TwoBodyBesselScalarEmbed``
         scalar_embed_output_dim (int): output dimension of the scalar embedding module (default ``None`` will use ``num_scalar_features``)
         num_layers (int): number of Allegro layers
