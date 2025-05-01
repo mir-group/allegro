@@ -1,12 +1,11 @@
-<center>
-
+<p align="center">
 <img src="./logo.png" width="50%" title="Allegro" alt="Allegro"/> 
+</p>
 
 <br/>
 
 [![PyPI version](https://img.shields.io/pypi/v/nequip-allegro.svg)](https://pypi.python.org/pypi/nequip-allegro/)
 
-</center>
 
 # Allegro
 
@@ -31,12 +30,13 @@ In particular, `allegro` implements the Allegro model as an **extension package*
 ```bash
 pip install nequip-allegro
 ```
-Installing `allegro` in this way will also install the `nequip` package.
+Installing `allegro` in this way will also install the `nequip` package from PyPI.
 
 ## Usage
 
-The `allegro` package provides the Allegro model for use within the [NequIP framework](https://github.com/mir-group/nequip). [The framework's documentation](https://nequip.readthedocs.io) describes how  to train, test, and use models.
-A minimal example of a config file for training an Allegro model is provided at [`configs/tutorial.yaml`](configs/tutorial.yaml).
+The `allegro` package provides the Allegro model for use within the [NequIP framework](https://github.com/mir-group/nequip).
+[The framework's documentation](https://nequip.readthedocs.io) describes how  to train, test, and use models.
+A minimal example of a config file for training an Allegro model is provided at [`configs/tutorial.yaml`](configs/tutorial.yaml) and further details can be found in the [Allegro docs](https://nequip.readthedocs.io/projects/allegro/en/latest/).
 
 
 ## LAMMPS Integration
@@ -84,7 +84,7 @@ If you have a self-contained question or other discussion topic, try our [GitHub
 
 Active users and interested developers are invited to join us on the NequIP community chat server, which is hosted on the excellent [Zulip](https://zulip.com/) software.
 Zulip is organized a little bit differently than chat software like Slack or Discord that you may be familiar with: please review [their introduction](https://zulip.com/help/introduction-to-topics) before posting.
-[Register for the NequIP community here](https://nequip.zulipchat.com).
+[Fill out the interest form for the NequIP community here](https://forms.gle/mEuonVCHdsgTtLXy7).
 
 If you want to contribute to the code, please read [`CONTRIBUTING.md`](https://github.com/mir-group/nequip/blob/main/docs/dev/contributing.md) from the `nequip` repository; this repository follows the same processes.
 
