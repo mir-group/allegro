@@ -19,7 +19,7 @@ jobs:
         torch-version: [2.2.0, "2.*"]
     container:
       image: nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
-      options: ${{ github.event.repository.private && '--gpus all' || ' ' }}
+      options: --gpus all
     steps:
     - uses: actions/checkout@v4
     - name: Install Python
@@ -34,10 +34,13 @@ jobs:
     - name: Install git
       run: |
         apt install git -y
-    - name: Clone NequIP packages GitHub
-      if: github.event.repository.private == false
-      run: |
-        git clone -b ${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name}} --depth 1 https://github.com/mir-group/nequip.git
+    - name: Clone NequIP packages
+      uses: mir-group/nequip-gh-actions/clone@main
+      with:
+        package_names: "nequip"
+        ssh_keys: "${{ secrets.NEQUIP }}"
+        private_flag: ${{ github.event.repository.private}}
+        branch: ${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name}}
     - name: Install PyTorch
       env:
         TORCH: "${{ matrix.torch-version }}"
