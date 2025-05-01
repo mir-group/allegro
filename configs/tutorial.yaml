@@ -89,7 +89,7 @@ training_module:
     # maximum order l to use in spherical harmonics embedding, 1 is baseline (fast), 2 is more accurate, but slower, 3 highly accurate but slow
     l_max: 1
     # whether to include parity symmetry equivariance
-    # allowed: o3_full, o3_restricted, so3
+    # allowed: o3_full, o3_restricted
     parity_setting: o3_full   
 
     # == allegro layers ==
