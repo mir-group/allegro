@@ -7,5 +7,5 @@ The Python API is relevant to learning about the hyperparameters of the Allegro 
 
  .. toctree::
 
-    api
+    allegro_model
     lammps
