@@ -24,7 +24,7 @@ def TwoBodyBesselScalarEmbed(
     polynomial_cutoff_p: int = 6,
     # two body MLP
     two_body_embedding_dim: int = 32,
-    two_body_mlp_hidden_layers_depth: int = 2,
+    two_body_mlp_hidden_layers_depth: int = 1,
     two_body_mlp_hidden_layers_width: int = 64,
     two_body_mlp_nonlinearity: Optional[str] = "silu",
     # model builder params
@@ -52,7 +52,7 @@ def TwoBodyBesselScalarEmbed(
           bessel_trainable: false
           polynomial_cutoff_p: 6
           two_body_embedding_dim: 32
-          two_body_mlp_hidden_layers_depth: 2
+          two_body_mlp_hidden_layers_depth: 1
           two_body_mlp_hidden_layers_width: 64
           two_body_mlp_nonlinearity: silu
 
@@ -61,7 +61,7 @@ def TwoBodyBesselScalarEmbed(
         bessel_trainable (int): whether Bessel roots are trainable (default ``False``)
         polynomial_cutoff_p (int): p-exponent used in polynomial cutoff function, smaller p corresponds to stronger decay with distance (default ``6``)
         two_body_embedding_dim (int): intermediate embedding dimension before going through two-body MLP
-        two_body_mlp_hidden_layers_depth (int): number of hidden layers of two-body MLP
+        two_body_mlp_hidden_layers_depth (int): number of hidden layers of two-body MLP (default ``1``)
         two_body_mlp_hidden_layers_width (int): depth of hidden layers of two-body MLP
         two_body_mlp_nonlinearity (str): ``silu``, ``mish``, ``gelu``, or ``None`` (default ``silu``)
     """
