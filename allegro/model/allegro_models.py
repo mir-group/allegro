@@ -77,13 +77,13 @@ def AllegroModel(**kwargs):
         num_layers (int): number of Allegro layers
         num_scalar_features (int): multiplicity of scalar features in the Allegro layers
         num_tensor_features (int): multiplicity of tensor features in the Allegro layers
-        allegro_mlp_hidden_layers_depth (int): number of hidden layers in the Allegro scalar MLPs
-        allegro_mlp_hidden_layers_width (int): width of hidden layers in the Allegro scalar MLPs
+        allegro_mlp_hidden_layers_depth (int): number of hidden layers in the Allegro scalar MLPs (default ``1``)
+        allegro_mlp_hidden_layers_width (int): width of hidden layers in the Allegro scalar MLPs (reasonable to set it to be the same as ``num_scalar_features``)
         allegro_mlp_nonlinearity (str): ``silu``, ``mish``, ``gelu``, or ``None`` (default ``silu``)
         tp_path_channel_coupling (bool): whether Allegro tensor product weights couple the paths with the channels or not, ``True`` is expected to be more expressive than ``False`` (default ``True``)
-        readout_mlp_hidden_layers_depth (int): number of hidden layers in the readout MLP
-        readout_mlp_hidden_layers_width (int): width of hidden layers in the readout MLP
-        readout_mlp_nonlinearity (str): ``silu``, ``mish``, ``gelu``, or ``None`` (default ``None``)
+        readout_mlp_hidden_layers_depth (int): number of hidden layers in the readout MLP (default ``1``)
+        readout_mlp_hidden_layers_width (int): width of hidden layers in the readout MLP (reasonable to set it to be the same as ``num_scalar_features``)
+        readout_mlp_nonlinearity (str): ``silu``, ``mish``, ``gelu``, or ``None`` (default ``silu``)
         avg_num_neighbors (float): used to normalize edge sums for better numerics (default ``None``)
         per_type_energy_scales (float/List[float]): per-atom energy scales, which could be derived from the force RMS of the data (default ``None``)
         per_type_energy_shifts (float/List[float]): per-atom energy shifts, which should generally be isolated atom reference energies or estimated from average pre-atom energies of the data (default ``None``)
@@ -108,15 +108,15 @@ def FullAllegroEnergyModel(
     # allegro layers
     num_layers: int = 2,
     num_scalar_features: int = 64,
-    num_tensor_features: int = 64,
-    allegro_mlp_hidden_layers_depth: int = 2,
+    num_tensor_features: int = 16,
+    allegro_mlp_hidden_layers_depth: int = 1,
     allegro_mlp_hidden_layers_width: int = 64,
     allegro_mlp_nonlinearity: Optional[str] = "silu",
     tp_path_channel_coupling: bool = True,
     # readout
-    readout_mlp_hidden_layers_depth: int = 2,
+    readout_mlp_hidden_layers_depth: int = 1,
     readout_mlp_hidden_layers_width: int = 32,
-    readout_mlp_nonlinearity: Optional[str] = None,
+    readout_mlp_nonlinearity: Optional[str] = "silu",
     # edge sum normalization
     avg_num_neighbors: Optional[float] = None,
     # allegro layers defaults
