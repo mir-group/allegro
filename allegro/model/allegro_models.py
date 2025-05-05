@@ -112,7 +112,6 @@ def FullAllegroEnergyModel(
     scalar_embed_mlp_hidden_layers_depth: int = 1,
     scalar_embed_mlp_hidden_layers_width: int = 64,
     scalar_embed_mlp_nonlinearity: int = "silu",
-    scalar_embed_dim: Optional[int] = None,
     # allegro layers
     num_layers: int = 2,
     num_scalar_features: int = 64,
@@ -161,9 +160,7 @@ def FullAllegroEnergyModel(
     # i.e. they must have `type_names`, `module_output_dim`, `scalar_embed_field`, `irreps_in`
 
     scalar_embed_mlp = ScalarMLP(
-        output_dim=(
-            num_scalar_features if scalar_embed_dim is None else scalar_embed_dim
-        ),
+        output_dim=num_scalar_features,
         hidden_layers_depth=scalar_embed_mlp_hidden_layers_depth,
         hidden_layers_width=scalar_embed_mlp_hidden_layers_width,
         nonlinearity=scalar_embed_mlp_nonlinearity,

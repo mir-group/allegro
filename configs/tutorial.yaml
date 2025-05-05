@@ -74,6 +74,7 @@ training_module:
 
     # === two-body scalar embedding ===
     radial_chemical_embed:
+      # the defaults for the Bessel embedding module are usually appropriate
       _target_: allegro.nn.TwoBodyBesselScalarEmbed
       num_bessels: 8
       bessel_trainable: false
@@ -86,10 +87,6 @@ training_module:
     scalar_embed_mlp_hidden_layers_depth: 1
     scalar_embed_mlp_hidden_layers_width: ${num_scalar_features}
     scalar_embed_mlp_nonlinearity: silu
-
-    # one could explicitly specify the initial scalar embedding's output dimension
-    # if `scalar_embed_dim` is not provided (or `null`), Allegro will use `num_scalar_features` in its place
-    # scalar_embed_dim: 256
 
     # === core hyperparameters ===
     # The following hyperparameters are the main ones that one should focus on tuning.
