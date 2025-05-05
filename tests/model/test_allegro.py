@@ -8,6 +8,9 @@ COMMON_CONFIG = {
     "type_names": ["H", "C", "O"],
     "r_max": 4.0,
     "avg_num_neighbors": 5.0,  # very approximate to keep numerics sane
+    "radial_chemical_embed_dim": 8,
+    "scalar_embed_mlp_hidden_layers_depth": 1,
+    "scalar_embed_mlp_hidden_layers_width": 32,
     "num_layers": 2,
     "l_max": 2,
     "num_scalar_features": 32,
@@ -30,9 +33,6 @@ minimal_config1 = dict(
 BESSEL_CONFIG = {
     "_target_": "allegro.nn.TwoBodyBesselScalarEmbed",
     "num_bessels": 4,
-    "two_body_embedding_dim": 8,
-    "two_body_mlp_hidden_layers_depth": 1,
-    "two_body_mlp_hidden_layers_width": 32,
 }
 
 SPLINE_CONFIG = {
@@ -103,7 +103,7 @@ class TestAllegro(BaseEnergyModelTests):
     ):
         config = request.param
         config = config.copy()
-        config.update({"scalar_embed": scalar_embed_config})
+        config.update({"radial_chemical_embed": scalar_embed_config})
         config.update({"parity_setting": parity_setting})
         config.update({"scatter_features": scatter_features})
         config.update({"tp_path_channel_coupling": tp_path_channel_coupling})
