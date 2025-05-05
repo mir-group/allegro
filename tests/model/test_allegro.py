@@ -55,11 +55,11 @@ class TestAllegro(BaseEnergyModelTests):
         return request.param
 
     @pytest.fixture(
-        # only test `o3_full` case to save time
-        params=["o3_full"],  # "o3_restricted"
+        # only test True case to save time
+        params=[True],  # False
         scope="class",
     )
-    def parity_setting(self, request):
+    def parity(self, request):
         return request.param
 
     @pytest.fixture(
@@ -96,7 +96,7 @@ class TestAllegro(BaseEnergyModelTests):
         self,
         request,
         scalar_embed_config,
-        parity_setting,
+        parity,
         scatter_features,
         tp_path_channel_coupling,
         forward_normalize,
@@ -104,7 +104,7 @@ class TestAllegro(BaseEnergyModelTests):
         config = request.param
         config = config.copy()
         config.update({"radial_chemical_embed": scalar_embed_config})
-        config.update({"parity_setting": parity_setting})
+        config.update({"parity": parity})
         config.update({"scatter_features": scatter_features})
         config.update({"tp_path_channel_coupling": tp_path_channel_coupling})
         config.update({"forward_normalize": forward_normalize})

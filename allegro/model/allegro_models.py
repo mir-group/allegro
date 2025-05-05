@@ -37,20 +37,19 @@ logger = RankedLogger(__name__, rank_zero_only=True)
 @model_builder
 def AllegroEnergyModel(
     l_max: int,
-    parity_setting: str = "o3_full",
+    parity: bool = True,
     **kwargs,
 ):
-    assert parity_setting in ("o3_full", "o3_restricted")
     irreps_edge_sh = repr(o3.Irreps.spherical_harmonics(l_max, p=-1))
     # set tensor_track_allowed_irreps
     # note that it is treated as a set, so order doesn't really matter
-    if parity_setting == "o3_full":
+    if parity:
         # we want all irreps up to lmax
         tensor_track_allowed_irreps = o3.Irreps(
             [(1, (this_l, p)) for this_l in range(l_max + 1) for p in (1, -1)]
         )
     else:
-        # o3_restricted, we want only irreps that show up in the original SH
+        # we want only irreps that show up in the original SH
         tensor_track_allowed_irreps = irreps_edge_sh
 
     return FullAllegroEnergyModel(
@@ -71,7 +70,7 @@ def AllegroModel(**kwargs):
         per_edge_type_cutoff (Dict): one can optionally specify cutoffs for each edge type [must be smaller than ``r_max``] (default ``None``)
         type_names (Sequence[str]): list of atom type names
         l_max (int): maximum order :math:`\ell` to use in spherical harmonics embedding, 1 is baseline (fast), 2 is more accurate, but slower, 3 highly accurate but slow
-        parity_setting (str): parity symmetry equivariance setting, with options ``o3_full`` or ``o3_restricted`` (default ``o3_full``)
+        parity (bool): whether to include features with odd mirror parity (default ``True``)
         radial_chemical_embed: an Allegro-compatible two-body radial-chemical embedding module, e.g. ``allegro.nn.TwoBodyBesselScalarEmbed``
         two_body_mlp_hidden_layers_depth (int): number of hidden layers of two-body MLP (default ``1``)
         two_body_mlp_hidden_layers_width (int): depth of hidden layers of two-body MLP
