@@ -115,9 +115,9 @@ training_module:
     # === advanced hyperparameters ===
     # The following hyperparameters should remain in their default states until the above core hyperparameters have been set.
 
-    # whether to include parity symmetry equivariance
-    # allowed: o3_full, o3_restricted
-    parity_setting: o3_full
+    # whether to include features with odd mirror parity
+    # often turning parity off gives equally good results but faster networks, so do consider this
+    parity: true
 
     # whether the tensor product weights couple the paths and channels or not (otherwise the weights are only applied per-path)
     # default is `true`, which is expected to be more expressive than `false`
