@@ -104,8 +104,8 @@ class TwoBodySplineScalarEmbed(GraphModuleMixin, torch.nn.Module):
         self,
         type_names: Sequence[str],
         # spline params
-        num_splines: int = 8,
-        spline_span: int = 4,
+        num_splines: int = 16,
+        spline_span: int = 12,
         # model builder params
         module_output_dim: int = 64,
         forward_weight_init: bool = True,
