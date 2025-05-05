@@ -6,13 +6,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Most recent change on the bottom.
 
-## [0.4.1]
+## [0.5.0]
+
+[Breaking] Breaking changes to simplify the user interface for using Allegro models, including refactoring modules and removing hyperparameter options.
+
+### Added
+- Allegro model docs
 
 ### Changed
 - [Breaking] refactored scalar MLP out of Bessel embedding
+- [Breaking] Allegro hyperparameter defaults
 
 ### Removed
 - [Breaking] `so3` argument for `parity_setting` (only `o3_full` and `o3_restricted` allowed now)
+- [Breaking] turn `parity_setting` into a bool called `parity` (`true` corresponds to `o3_full`; `false` corresponds to `o3_restricted`)
+- [Breaking] `scalar_embed_output_dim` is no longer a hyperparameter (and is fixed as `num_scalar_features` in the Allegro model)
 
 ## [0.4.0]
 
