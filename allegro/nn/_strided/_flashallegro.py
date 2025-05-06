@@ -424,11 +424,24 @@ def _metadata_helper(dim, coo, coovalue, p_to_nnz_values):
     sort_order = lexsort((coo[:, 2], coo[:, 1], coo[:, 0]))
     sorted_coo = coo[sort_order]
 
-    indptr = torch.zeros(dim + 1, dtype=torch.int16)
+    # Create indptr with torch.long first, then validate and cast to int16
+    indptr = torch.zeros(dim + 1, dtype=torch.long)
     indices = sorted_coo[:, 0].long() + 1
-    src = torch.ones_like(indices, dtype=torch.int16)
+    src = torch.ones_like(indices, dtype=torch.long)
     indptr = indptr.clone().scatter_add_(0, indices, src)
+    del src, indices
     indptr = torch.cumsum(indptr, dim=0)
+
+    # Assert that all values fit within int16 range
+    assert torch.all(
+        indptr <= torch.iinfo(torch.int16).max
+    ), "Values in indptr exceed int16 max value"
+    assert torch.all(
+        indptr >= torch.iinfo(torch.int16).min
+    ), "Values in indptr exceed int16 min value"
+
+    # Cast to int16 after validation
+    indptr = indptr.to(dtype=torch.int16)
 
     l1s = sorted_coo[:, 1].contiguous()
     l2s = sorted_coo[:, 2].contiguous()
@@ -449,14 +462,28 @@ def _initialize_metadata(w3j):
     coovalue = w3j_sum[tuple(coo.t())]
 
     # process `w3j` to `p_to_nnz_mapper`
-    p_to_nnz_mapper = torch.full_like(w3j_sum, fill_value=-1, dtype=torch.int16)
+    # Create with torch.long first
+    p_to_nnz_mapper = torch.full_like(w3j_sum, fill_value=-1, dtype=torch.long)
     for p in range(w3j.size(0)):
         nzidx = torch.nonzero(w3j[p], as_tuple=True)
         p_to_nnz_mapper[nzidx[0], nzidx[1], nzidx[2]] = p
+    del nzidx, w3j_sum, w3j
+
+    # Assert that all values fit within int16 range
+    assert torch.all(
+        p_to_nnz_mapper <= torch.iinfo(torch.int16).max
+    ), "Values in p_to_nnz_mapper exceed int16 max value"
+    assert torch.all(
+        p_to_nnz_mapper >= torch.iinfo(torch.int16).min
+    ), "Values in p_to_nnz_mapper exceed int16 min value"
+
+    # Cast to int16 after validation
+    p_to_nnz_mapper = p_to_nnz_mapper.to(dtype=torch.int16)
+
     p_to_nnz_mapper_nzidx = torch.nonzero(p_to_nnz_mapper >= 0)
     p_to_nnz_values = p_to_nnz_mapper[tuple(p_to_nnz_mapper_nzidx.t())]
 
-    del w3j, w3j_sum, p_to_nnz_mapper
+    del p_to_nnz_mapper, p_to_nnz_mapper_nzidx
 
     # forward
     indptr_fwd, l1s_fwd, l2s_fwd, vals_fwd, p_to_nnz_mapper_fwd = _metadata_helper(
