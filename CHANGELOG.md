@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Most recent change on the bottom.
 
+## [0.5.1]
+
+### Changed
+- bound `nequip` version under 0.8.0
+
+
 ## [0.5.0]
 
 [Breaking] Breaking changes to simplify the user interface for using Allegro models, including refactoring modules and removing hyperparameter options.
