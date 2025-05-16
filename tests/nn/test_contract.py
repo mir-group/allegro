@@ -32,6 +32,8 @@ def test_contract_kernel(
     assert torch.cuda.is_available()
     device = "cuda"
 
+    from allegro.nn._strided._flashallegro import TritonContracter
+
     with torch_default_dtype(dtype_from_name(dtype)):
         irreps_in1 = o3.Irreps(irreps_in1)
         irreps_in2 = o3.Irreps(irreps_in2)
@@ -50,17 +52,16 @@ def test_contract_kernel(
             mul=mul,
             instructions=instr,
             path_channel_coupling=path_channel_coupling,
-            use_custom_kernels=False,
         ).to(device=device)
-        c_kernel = Contracter(
+        c_kernel = TritonContracter(
             irreps_in1=o3.Irreps((1, ir) for _, ir in irreps_in1),
             irreps_in2=o3.Irreps((1, ir) for _, ir in irreps_in2),
             irreps_out=o3.Irreps((1, ir) for _, ir in irreps_out),
             mul=mul,
             instructions=instr,
             path_channel_coupling=path_channel_coupling,
-            use_custom_kernels=True,
         ).to(device=device)
+        c_kernel.eval()
 
         with torch.no_grad():
             c_kernel.weights.copy_(c_base.weights)
@@ -143,7 +144,6 @@ def test_contract_jit(
             mul=mul,
             instructions=instr,
             path_channel_coupling=path_channel_coupling,
-            use_custom_kernels=False,
         ).to(device=device)
         c_opt_mod = Contracter(
             irreps_in1=o3.Irreps((1, ir) for _, ir in irreps_in1),
@@ -152,7 +152,6 @@ def test_contract_jit(
             mul=mul,
             instructions=instr,
             path_channel_coupling=path_channel_coupling,
-            use_custom_kernels=False,
         ).to(device=device)
         with torch.no_grad():
             c_opt_mod.weights.copy_(c_base.weights)
@@ -260,7 +259,6 @@ def test_like_tp(
             instructions=instr,
             path_channel_coupling=True,
             irrep_normalization=irrep_normalization,
-            use_custom_kernels=False,
         ).to(device=device)
         print(c)
         # make input data
