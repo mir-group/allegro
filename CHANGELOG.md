@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Most recent change on the bottom.
 
+
+
+## [0.6.0]
+
+### Changed
+- bound `nequip` version >=0.8.0
+- [Breaking] mechanism for using custom Triton TP kernel
+
 ## [0.5.1]
 
 ### Changed
