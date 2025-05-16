@@ -5,6 +5,7 @@ from torch.library import triton_op, wrap_triton
 import triton
 import triton.language as tl
 
+from ._contract import Contracter
 from ._lexsort import lexsort
 
 
@@ -519,101 +520,6 @@ def _initialize_metadata(w3j):
     )
 
 
-@torch.jit.unused
-class FlashAllegroKernel(torch.nn.Module):
-
-    def __init__(
-        self,
-        w3j,
-        path_channel_coupling,
-        base_dim_out,
-        base_dim1,
-        base_dim2,
-    ):
-        super().__init__()
-
-        # for now precomputing the number of non-zeros from ww3j
-        self.NNZ = int(torch.count_nonzero(w3j).item())
-        self.mode = "up" if path_channel_coupling else "p"
-        self.base_dim_out = base_dim_out
-        self.base_dim1 = base_dim1
-        self.base_dim2 = base_dim2
-
-        (
-            indptr_fwd,
-            l1s_fwd,
-            l2s_fwd,
-            indptr_bwd1,
-            ks_bwd1,
-            l2s_bwd1,
-            indptr_bwd2,
-            ks_bwd2,
-            l1s_bwd2,
-            vals_fwd,
-            vals_bwd1,
-            vals_bwd2,
-            p_to_nnz_mapper_fwd,
-            p_to_nnz_mapper_bwd1,
-            p_to_nnz_mapper_bwd2,
-        ) = _initialize_metadata(w3j)
-
-        self.register_buffer("indptr_fwd", indptr_fwd, persistent=False)
-        self.register_buffer("l1s_fwd", l1s_fwd, persistent=False)
-        self.register_buffer("l2s_fwd", l2s_fwd, persistent=False)
-
-        self.register_buffer("indptr_bwd1", indptr_bwd1, persistent=False)
-        self.register_buffer("ks_bwd1", ks_bwd1, persistent=False)
-        self.register_buffer("l2s_bwd1", l2s_bwd1, persistent=False)
-
-        self.register_buffer("indptr_bwd2", indptr_bwd2, persistent=False)
-        self.register_buffer("ks_bwd2", ks_bwd2, persistent=False)
-        self.register_buffer("l1s_bwd2", l1s_bwd2, persistent=False)
-
-        self.register_buffer("vals_fwd", vals_fwd, persistent=False)
-        self.register_buffer("vals_bwd1", vals_bwd1, persistent=False)
-        self.register_buffer("vals_bwd2", vals_bwd2, persistent=False)
-
-        self.register_buffer(
-            "p_to_nnz_mapper_fwd", p_to_nnz_mapper_fwd, persistent=False
-        )
-        self.register_buffer(
-            "p_to_nnz_mapper_bwd1", p_to_nnz_mapper_bwd1, persistent=False
-        )
-        self.register_buffer(
-            "p_to_nnz_mapper_bwd2", p_to_nnz_mapper_bwd2, persistent=False
-        )
-
-    def forward(
-        self, x1: torch.Tensor, x2: torch.Tensor, weights: torch.Tensor
-    ) -> torch.Tensor:
-        return _flash_allegro.apply(
-            x1,
-            x2,
-            self.mode,
-            self.indptr_fwd,
-            self.indptr_bwd1,
-            self.indptr_bwd2,
-            self.l1s_fwd,
-            self.l2s_fwd,
-            self.vals_fwd,
-            self.p_to_nnz_mapper_fwd,
-            self.ks_bwd1,
-            self.l2s_bwd1,
-            self.vals_bwd1,
-            self.p_to_nnz_mapper_bwd1,
-            self.ks_bwd2,
-            self.l1s_bwd2,
-            self.vals_bwd2,
-            self.p_to_nnz_mapper_bwd2,
-            weights,
-            self.base_dim_out,
-            self.base_dim1,
-            self.base_dim2,
-            self.NNZ,
-            x1.dtype,
-        )
-
-
 @triton_op("mylib::allegro", mutates_args={})
 def _triton_kernel_allegro(
     mode: str,
@@ -723,3 +629,89 @@ def _triton_kernel_allegro(
     else:
         raise ValueError("Invalid mode")
     return output.reshape(BATCH, UMAX, OUTDIM)
+
+
+class TritonContracter(Contracter):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        # for now precomputing the number of non-zeros from ww3j
+        self.NNZ = int(torch.count_nonzero(self.w3j).item())
+        self.mode = "up" if self.path_channel_coupling else "p"
+
+        (
+            indptr_fwd,
+            l1s_fwd,
+            l2s_fwd,
+            indptr_bwd1,
+            ks_bwd1,
+            l2s_bwd1,
+            indptr_bwd2,
+            ks_bwd2,
+            l1s_bwd2,
+            vals_fwd,
+            vals_bwd1,
+            vals_bwd2,
+            p_to_nnz_mapper_fwd,
+            p_to_nnz_mapper_bwd1,
+            p_to_nnz_mapper_bwd2,
+        ) = _initialize_metadata(self.w3j)
+
+        self.register_buffer("indptr_fwd", indptr_fwd, persistent=False)
+        self.register_buffer("l1s_fwd", l1s_fwd, persistent=False)
+        self.register_buffer("l2s_fwd", l2s_fwd, persistent=False)
+
+        self.register_buffer("indptr_bwd1", indptr_bwd1, persistent=False)
+        self.register_buffer("ks_bwd1", ks_bwd1, persistent=False)
+        self.register_buffer("l2s_bwd1", l2s_bwd1, persistent=False)
+
+        self.register_buffer("indptr_bwd2", indptr_bwd2, persistent=False)
+        self.register_buffer("ks_bwd2", ks_bwd2, persistent=False)
+        self.register_buffer("l1s_bwd2", l1s_bwd2, persistent=False)
+
+        self.register_buffer("vals_fwd", vals_fwd, persistent=False)
+        self.register_buffer("vals_bwd1", vals_bwd1, persistent=False)
+        self.register_buffer("vals_bwd2", vals_bwd2, persistent=False)
+
+        self.register_buffer(
+            "p_to_nnz_mapper_fwd", p_to_nnz_mapper_fwd, persistent=False
+        )
+        self.register_buffer(
+            "p_to_nnz_mapper_bwd1", p_to_nnz_mapper_bwd1, persistent=False
+        )
+        self.register_buffer(
+            "p_to_nnz_mapper_bwd2", p_to_nnz_mapper_bwd2, persistent=False
+        )
+
+    def _contract(self, x1, x2):
+        # runtime conditions for triggering kernel code path
+        if x1.is_cuda and not self.training:
+            return _flash_allegro.apply(
+                x1,
+                x2,
+                self.mode,
+                self.indptr_fwd,
+                self.indptr_bwd1,
+                self.indptr_bwd2,
+                self.l1s_fwd,
+                self.l2s_fwd,
+                self.vals_fwd,
+                self.p_to_nnz_mapper_fwd,
+                self.ks_bwd1,
+                self.l2s_bwd1,
+                self.vals_bwd1,
+                self.p_to_nnz_mapper_bwd1,
+                self.ks_bwd2,
+                self.l1s_bwd2,
+                self.vals_bwd2,
+                self.p_to_nnz_mapper_bwd2,
+                self.weights,
+                self.base_dim_out,
+                self.base_dim1,
+                self.base_dim2,
+                self.NNZ,
+                x1.dtype,
+            )
+        else:
+            return super()._contract(x1, x2)
