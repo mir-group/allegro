@@ -159,21 +159,88 @@ def tensor_product_kernel(
 
     tl.store(output_ptr + out_offsets, acc, mask=full_mask)
 
-class _flash_allegro(torch.autograd.Function):
-
-    @staticmethod
-    def forward(
-        ctx,
+    
+@triton_op("triton::flashallegro_forward", mutates_args={})
+def _flashallegro_forward(
+    input1: torch.Tensor,
+    input2: torch.Tensor,
+    mode: str,
+    indptr_fwd: torch.Tensor,
+    indptr_bwd1: torch.Tensor,
+    indptr_bwd2: torch.Tensor,
+    l1s_fwd: torch.Tensor,
+    l2s_fwd: torch.Tensor,
+    vals_fwd: torch.Tensor,
+    p_to_nnz_mapper_fwd: torch.Tensor,
+    ks_bwd1: torch.Tensor,
+    l2s_bwd1: torch.Tensor,
+    vals_bwd1: torch.Tensor,
+    p_to_nnz_mapper_bwd1: torch.Tensor,
+    ks_bwd2: torch.Tensor,
+    l1s_bwd2: torch.Tensor,
+    vals_bwd2: torch.Tensor,
+    p_to_nnz_mapper_bwd2: torch.Tensor,
+    weights: torch.Tensor,
+    OUTDIM: int,
+    XDIM: int,
+    YDIM: int,
+    NNZ: int,
+    output_dtype: torch.dtype,
+) -> torch.Tensor:
+    output = _triton_kernel_allegro(
+        mode,
         input1,
         input2,
-        mode,
         indptr_fwd,
-        indptr_bwd1,
-        indptr_bwd2,
         l1s_fwd,
         l2s_fwd,
         vals_fwd,
         p_to_nnz_mapper_fwd,
+        weights,
+        OUTDIM,
+        XDIM,
+        YDIM,
+        NNZ,
+        output_dtype,
+    )
+    return output
+
+def setup_context(ctx, inputs, output):
+    
+    input1, input2, mode, \
+    indptr_fwd, indptr_bwd1, indptr_bwd2, \
+    l1s_fwd, l2s_fwd, vals_fwd, p_to_nnz_mapper_fwd, \
+    ks_bwd1, l2s_bwd1, vals_bwd1, p_to_nnz_mapper_bwd1, \
+    ks_bwd2, l1s_bwd2, vals_bwd2, p_to_nnz_mapper_bwd2, \
+    weights, OUTDIM, XDIM, YDIM, NNZ, output_dtype = inputs
+    ctx.save_for_backward(
+            input1,
+            input2,
+            indptr_bwd1,
+            indptr_bwd2,
+            ks_bwd1,
+            l2s_bwd1,
+            vals_bwd1,
+            p_to_nnz_mapper_bwd1,
+            ks_bwd2,
+            l1s_bwd2,
+            vals_bwd2,
+            p_to_nnz_mapper_bwd2,
+            weights,
+        )
+    ctx.mode = mode
+    ctx.OUTDIM = OUTDIM
+    ctx.XDIM = XDIM
+    ctx.YDIM = YDIM
+    ctx.NNZ = NNZ
+    ctx.output_dtype = output_dtype
+
+def backward(ctx, grad_output):
+    (
+        input1,
+        input2,
+        indptr_bwd1,
+        indptr_bwd2,
         ks_bwd1,
         l2s_bwd1,
         vals_bwd1,
@@ -183,138 +250,77 @@ class _flash_allegro(torch.autograd.Function):
         vals_bwd2,
         p_to_nnz_mapper_bwd2,
         weights,
-        OUTDIM,
+    ) = ctx.saved_tensors
+    mode, OUTDIM, XDIM, YDIM, NNZ, output_dtype = (
+        ctx.mode,
+        ctx.OUTDIM,
+        ctx.XDIM,
+        ctx.YDIM,
+        ctx.NNZ,
+        ctx.output_dtype,
+    )
+
+    grad_input1 = _triton_kernel_allegro(
+        mode,
+        grad_output,
+        input2,
+        indptr_bwd1,
+        ks_bwd1,
+        l2s_bwd1,
+        vals_bwd1,
+        p_to_nnz_mapper_bwd1,
+        weights,
         XDIM,
+        OUTDIM,
         YDIM,
         NNZ,
         output_dtype,
-    ):
+    )
+    grad_input2 = _triton_kernel_allegro(
+        mode,
+        grad_output,
+        input1,
+        indptr_bwd2,
+        ks_bwd2,
+        l1s_bwd2,
+        vals_bwd2,
+        p_to_nnz_mapper_bwd2,
+        weights,
+        YDIM,
+        OUTDIM,
+        XDIM,
+        NNZ,
+        output_dtype,
+    )
 
-        output = torch.ops.triton.allegro.default(
-            mode,
-            input1,
-            input2,
-            indptr_fwd,
-            l1s_fwd,
-            l2s_fwd,
-            vals_fwd,
-            p_to_nnz_mapper_fwd,
-            weights,
-            OUTDIM,
-            XDIM,
-            YDIM,
-            NNZ,
-            output_dtype,
-        )
-        ctx.save_for_backward(
-            input1,
-            input2,
-            indptr_bwd1,
-            indptr_bwd2,
-            ks_bwd1,
-            l2s_bwd1,
-            vals_bwd1,
-            p_to_nnz_mapper_bwd1,
-            ks_bwd2,
-            l1s_bwd2,
-            vals_bwd2,
-            p_to_nnz_mapper_bwd2,
-            weights,
-        )
-        ctx.mode = mode
-        ctx.OUTDIM = OUTDIM
-        ctx.XDIM = XDIM
-        ctx.YDIM = YDIM
-        ctx.NNZ = NNZ
-        ctx.output_dtype = output_dtype
-        return output
+    return (
+        grad_input1,
+        grad_input2,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
 
-    @staticmethod
-    def backward(ctx, grad_output):
-        (
-            input1,
-            input2,
-            indptr_bwd1,
-            indptr_bwd2,
-            ks_bwd1,
-            l2s_bwd1,
-            vals_bwd1,
-            p_to_nnz_mapper_bwd1,
-            ks_bwd2,
-            l1s_bwd2,
-            vals_bwd2,
-            p_to_nnz_mapper_bwd2,
-            weights,
-        ) = ctx.saved_tensors
-        mode, OUTDIM, XDIM, YDIM, NNZ, output_dtype = (
-            ctx.mode,
-            ctx.OUTDIM,
-            ctx.XDIM,
-            ctx.YDIM,
-            ctx.NNZ,
-            ctx.output_dtype,
-        )
-
-        grad_input1 = torch.ops.triton.allegro.default(
-            mode,
-            grad_output,
-            input2,
-            indptr_bwd1,
-            ks_bwd1,
-            l2s_bwd1,
-            vals_bwd1,
-            p_to_nnz_mapper_bwd1,
-            weights,
-            XDIM,
-            OUTDIM,
-            YDIM,
-            NNZ,
-            output_dtype,
-        )
-        grad_input2 = torch.ops.triton.allegro.default(
-            mode,
-            grad_output,
-            input1,
-            indptr_bwd2,
-            ks_bwd2,
-            l1s_bwd2,
-            vals_bwd2,
-            p_to_nnz_mapper_bwd2,
-            weights,
-            YDIM,
-            OUTDIM,
-            XDIM,
-            NNZ,
-            output_dtype,
-        )
-
-        return (
-            grad_input1,
-            grad_input2,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
-
+_flashallegro_forward.register_autograd(backward, setup_context=setup_context)
 
 def _metadata_helper(dim, coo, coovalue, p_to_nnz_values):
     sort_order = lexsort((coo[:, 2], coo[:, 1], coo[:, 0]))
@@ -415,7 +421,6 @@ def _initialize_metadata(w3j):
     )
 
 
-@triton_op("triton::allegro", mutates_args={})
 def _triton_kernel_allegro(
     mode: str,
     # Pointers to matrices
@@ -541,7 +546,7 @@ class TritonContracter(Contracter):
     def _contract(self, x1, x2):
         # runtime conditions for triggering kernel code path
         if x1.is_cuda and not self.training:
-            return _flash_allegro.apply(
+            return torch.ops.triton.flashallegro_forward(
                 x1,
                 x2,
                 self.mode,
