@@ -15,113 +15,6 @@ TORCH_TRITON_DTYPE_MAPPER = {
     torch.float16: tl.float16,
 }
 
-
-@triton.autotune(
-    configs=[
-        triton.Config({"BLOCK_B": 16, "BLOCK_DIM": 16}, num_warps=4, num_stages=2)
-    ],
-    key=["BATCH", "XDIM", "YDIM", "OUTDIM", "UMAX", "NNZ"],
-)
-@triton.jit
-def tensor_product_p_kernel(
-    # Pointers to matrices
-    x_ptr,
-    y_ptr,
-    output_ptr,
-    # Pointers to sparse data
-    indptr_ptr,
-    x_idx_ptr,
-    y_idx_ptr,
-    p_to_nnz_mapper_ptr,
-    # CG vals
-    vals_ptr,
-    # Weights
-    weights_ptr,
-    # Matrix dimensions
-    BATCH,
-    XDIM,
-    YDIM,
-    OUTDIM,
-    UMAX,
-    NNZ,
-    # Strides
-    x_stride_dim,
-    x_stride_batch,
-    y_stride_dim,
-    y_stride_batch,
-    output_stride_dim,
-    output_stride_batch,
-    # Grid level blocks
-    BLOCK_B: tl.constexpr,
-    BLOCK_DIM: tl.constexpr,
-    output_dtype: tl.constexpr,
-):
-
-    # Program IDs remain the same
-    pid_b = tl.program_id(0)
-    pid_dim = tl.program_id(1)
-
-    # Initialize accumulator
-    acc = tl.zeros((BLOCK_DIM, BLOCK_B), dtype=output_dtype)
-
-    # Sparse iteration setup
-    start_ptr = tl.load(
-        indptr_ptr + ((pid_dim * BLOCK_DIM) + tl.arange(0, BLOCK_DIM)),
-        mask=(((pid_dim * BLOCK_DIM) + tl.arange(0, BLOCK_DIM)) < OUTDIM),
-    )
-    end_ptr = tl.load(
-        indptr_ptr + ((pid_dim * BLOCK_DIM) + tl.arange(0, BLOCK_DIM)) + 1,
-        mask=(((pid_dim * BLOCK_DIM) + tl.arange(0, BLOCK_DIM)) < OUTDIM),
-    )
-    max_nnz = tl.max(end_ptr - start_ptr)
-
-    # Process non-zero elements
-    for p in tl.range(0, max_nnz, loop_unroll_factor=1):
-        pos = start_ptr + p
-        pos_mask = pos < end_ptr
-
-        b = (pid_b * BLOCK_B) + tl.arange(0, BLOCK_B)
-
-        b_mask = b < (BATCH * UMAX)
-
-        x_idx = tl.load(x_idx_ptr + pos, mask=pos_mask, eviction_policy="evict_first")
-        y_idx = tl.load(y_idx_ptr + pos, mask=pos_mask, eviction_policy="evict_first")
-        w_idx = tl.load(
-            p_to_nnz_mapper_ptr + pos, mask=pos_mask, eviction_policy="evict_first"
-        )
-        vals = tl.load(vals_ptr + pos, mask=pos_mask, eviction_policy="evict_first")
-
-        # Create load mask
-        load_mask = pos_mask[:, None] & b_mask[None, :]
-
-        # Calculate input offsets
-        x_offsets = b[None, :] * x_stride_batch + x_idx[:, None]
-
-        y_offsets = b[None, :] * y_stride_batch + y_idx[:, None]
-
-        # Load inputs and compute
-        x = tl.load(x_ptr + x_offsets, mask=load_mask)
-        y = tl.load(y_ptr + y_offsets, mask=load_mask)
-        w = tl.load(weights_ptr + w_idx, mask=pos_mask)
-
-        product = x * y * vals[:, None] * w[:, None]
-        acc = tl.where(load_mask, acc + product, acc)
-
-    # Calculate output offsets
-    out_offsets = ((pid_b * BLOCK_B) + tl.arange(0, BLOCK_B))[
-        None, :
-    ] * output_stride_batch + ((pid_dim * BLOCK_DIM) + tl.arange(0, BLOCK_DIM))[
-        :, None
-    ] * output_stride_dim
-
-    # Create combined mask for output
-    full_mask = (((pid_b * BLOCK_B) + tl.arange(0, BLOCK_B)) < (BATCH * UMAX))[
-        None, :
-    ] & (((pid_dim * BLOCK_DIM) + tl.arange(0, BLOCK_DIM)) < OUTDIM)[:, None]
-
-    tl.store(output_ptr + out_offsets, acc, mask=full_mask)
-
-
 @triton.autotune(
     configs=[
         triton.Config(
@@ -134,7 +27,7 @@ def tensor_product_p_kernel(
     key=["BATCH", "XDIM", "YDIM", "OUTDIM", "UMAX", "NNZ"],
 )
 @triton.jit
-def tensor_product_up_kernel(
+def tensor_product_kernel(
     # Pointers to matrices
     x_ptr,
     y_ptr,
@@ -165,7 +58,6 @@ def tensor_product_up_kernel(
     output_stride_dim,
     output_stride_u,
     output_stride_batch,
-    vals_stride_dim,
     weight_stride_u,
     weight_stride_dim,
     # Block sizes
@@ -173,6 +65,7 @@ def tensor_product_up_kernel(
     BLOCK_U: tl.constexpr,
     BLOCK_DIM: tl.constexpr,
     output_dtype: tl.constexpr,
+    mode: tl.constexpr,
 ):
 
     # Calculate program IDs
@@ -218,7 +111,6 @@ def tensor_product_up_kernel(
         load_mask = (
             pos_mask[:, None, None] & u_mask[None, :, None] & b_mask[None, None, :]
         )
-        load_mask_w = pos_mask[:, None] & u_mask[None, :]
 
         # Calculate input offsets
         x_offsets = (
@@ -233,14 +125,18 @@ def tensor_product_up_kernel(
             + y_idx[:, None, None]
         )
 
-        w_offsets = u[None, :] * weight_stride_u + w_idx[:, None] * weight_stride_dim
         # Load inputs and compute
         x = tl.load(x_ptr + x_offsets, mask=load_mask)
         y = tl.load(y_ptr + y_offsets, mask=load_mask)
-        w = tl.load(weights_ptr + w_offsets, mask=load_mask_w)
-
         vals = tl.broadcast_to(vals[:, None, None], (BLOCK_DIM, BLOCK_U, BLOCK_B))
-        w = tl.broadcast_to(w[:, :, None], (BLOCK_DIM, BLOCK_U, BLOCK_B))
+
+        if mode == "p":
+            w = tl.load(weights_ptr + w_idx, mask=pos_mask)
+            w = tl.broadcast_to(w[:, None, None], (BLOCK_DIM, BLOCK_U, BLOCK_B))
+        else:
+            w = tl.load(weights_ptr + u[None, :] * weight_stride_u + w_idx[:, None] * weight_stride_dim, 
+                    mask=pos_mask[:, None] & u_mask[None, :])
+            w = tl.broadcast_to(w[:, :, None], (BLOCK_DIM, BLOCK_U, BLOCK_B))
 
         product = x * y * vals * w
         acc = tl.where(load_mask, acc + product, acc)
@@ -262,7 +158,6 @@ def tensor_product_up_kernel(
     )
 
     tl.store(output_ptr + out_offsets, acc, mask=full_mask)
-
 
 class _flash_allegro(torch.autograd.Function):
 
@@ -295,7 +190,7 @@ class _flash_allegro(torch.autograd.Function):
         output_dtype,
     ):
 
-        output = torch.ops.mylib.allegro.default(
+        output = torch.ops.triton.allegro.default(
             mode,
             input1,
             input2,
@@ -360,7 +255,7 @@ class _flash_allegro(torch.autograd.Function):
             ctx.output_dtype,
         )
 
-        grad_input1 = torch.ops.mylib.allegro.default(
+        grad_input1 = torch.ops.triton.allegro.default(
             mode,
             grad_output,
             input2,
@@ -376,7 +271,7 @@ class _flash_allegro(torch.autograd.Function):
             NNZ,
             output_dtype,
         )
-        grad_input2 = torch.ops.mylib.allegro.default(
+        grad_input2 = torch.ops.triton.allegro.default(
             mode,
             grad_output,
             input1,
@@ -520,7 +415,7 @@ def _initialize_metadata(w3j):
     )
 
 
-@triton_op("mylib::allegro", mutates_args={})
+@triton_op("triton::allegro", mutates_args={})
 def _triton_kernel_allegro(
     mode: str,
     # Pointers to matrices
@@ -549,85 +444,44 @@ def _triton_kernel_allegro(
     BATCH = x.shape[0]
     UMAX = x.shape[1]
 
-    if mode == "p":
-        output = torch.empty((BATCH * UMAX, OUTDIM), dtype=x.dtype, device=x.device)
-        grid = lambda META: (  # noqa: E731
-            triton.cdiv(BATCH * UMAX, META["BLOCK_B"]),
-            triton.cdiv(OUTDIM, META["BLOCK_DIM"]),
+    output = torch.empty((BATCH, UMAX, OUTDIM), dtype=x.dtype, device=x.device)
+    grid = lambda META: (  # noqa: E731
+        triton.cdiv(BATCH, META["BLOCK_B"]),
+        triton.cdiv(UMAX, META["BLOCK_U"]),
+        triton.cdiv(OUTDIM, META["BLOCK_DIM"]),
         )
 
-        x = x.reshape(BATCH * UMAX, -1)
-        y = y.reshape(BATCH * UMAX, -1)
+    wrap_triton(tensor_product_kernel)[grid](
+        x_ptr=x,
+        y_ptr=y,
+        output_ptr=output,
+        indptr_ptr=indptr,
+        x_idx_ptr=x_idx,
+        y_idx_ptr=y_idx,
+        p_to_nnz_mapper_ptr=p_to_nnz_mapper,
+        vals_ptr=vals,
+        weights_ptr=weights,
+        BATCH=BATCH,
+        OUTDIM=OUTDIM,
+        XDIM=XDIM,
+        YDIM=YDIM,
+        UMAX=UMAX,
+        NNZ=NNZ,
+        output_stride_dim=output.stride(2),
+        output_stride_u=output.stride(1),
+        output_stride_batch=output.stride(0),
+        x_stride_dim=x.stride(2),
+        x_stride_u=x.stride(1),
+        x_stride_batch=x.stride(0),
+        y_stride_dim=y.stride(2),
+        y_stride_u=y.stride(1),
+        y_stride_batch=y.stride(0),
+        weight_stride_dim=weights.stride(1) if mode == "up" else 1,
+        weight_stride_u=weights.stride(0),
+        output_dtype=output_dtype,
+        mode=mode,
+    )
 
-    elif mode == "up":
-        output = torch.empty((BATCH, UMAX, OUTDIM), dtype=x.dtype, device=x.device)
-        grid = lambda META: (  # noqa: E731
-            triton.cdiv(BATCH, META["BLOCK_B"]),
-            triton.cdiv(UMAX, META["BLOCK_U"]),
-            triton.cdiv(OUTDIM, META["BLOCK_DIM"]),
-        )
-    else:
-        raise ValueError("Invalid mode")
-
-    if mode == "p":
-        wrap_triton(tensor_product_p_kernel)[grid](
-            x_ptr=x,
-            y_ptr=y,
-            output_ptr=output,
-            indptr_ptr=indptr,
-            x_idx_ptr=x_idx,
-            y_idx_ptr=y_idx,
-            p_to_nnz_mapper_ptr=p_to_nnz_mapper,
-            vals_ptr=vals,
-            weights_ptr=weights,
-            BATCH=BATCH,
-            OUTDIM=OUTDIM,
-            XDIM=XDIM,
-            YDIM=YDIM,
-            NNZ=NNZ,
-            UMAX=UMAX,
-            output_stride_dim=output.stride(1),
-            output_stride_batch=output.stride(0),
-            x_stride_dim=x.stride(1),
-            x_stride_batch=x.stride(0),
-            y_stride_dim=y.stride(1),
-            y_stride_batch=y.stride(0),
-            output_dtype=output_dtype,
-        )
-
-    elif mode == "up":
-        wrap_triton(tensor_product_up_kernel)[grid](
-            x_ptr=x,
-            y_ptr=y,
-            output_ptr=output,
-            indptr_ptr=indptr,
-            x_idx_ptr=x_idx,
-            y_idx_ptr=y_idx,
-            p_to_nnz_mapper_ptr=p_to_nnz_mapper,
-            vals_ptr=vals,
-            weights_ptr=weights,
-            BATCH=BATCH,
-            OUTDIM=OUTDIM,
-            XDIM=XDIM,
-            YDIM=YDIM,
-            UMAX=UMAX,
-            NNZ=NNZ,
-            output_stride_dim=output.stride(2),
-            output_stride_u=output.stride(1),
-            output_stride_batch=output.stride(0),
-            x_stride_dim=x.stride(2),
-            x_stride_u=x.stride(1),
-            x_stride_batch=x.stride(0),
-            y_stride_dim=y.stride(2),
-            y_stride_u=y.stride(1),
-            y_stride_batch=y.stride(0),
-            vals_stride_dim=vals.stride(0),
-            weight_stride_dim=weights.stride(1),
-            weight_stride_u=weights.stride(0),
-            output_dtype=output_dtype,
-        )
-    else:
-        raise ValueError("Invalid mode")
     return output.reshape(BATCH, UMAX, OUTDIM)
 
 
