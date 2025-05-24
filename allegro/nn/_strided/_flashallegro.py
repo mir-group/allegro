@@ -15,6 +15,7 @@ TORCH_TRITON_DTYPE_MAPPER = {
     torch.float16: tl.float16,
 }
 
+
 @triton.autotune(
     configs=[
         triton.Config(
@@ -134,8 +135,12 @@ def tensor_product_kernel(
             w = tl.load(weights_ptr + w_idx, mask=pos_mask)
             w = tl.broadcast_to(w[:, None, None], (BLOCK_DIM, BLOCK_U, BLOCK_B))
         else:
-            w = tl.load(weights_ptr + u[None, :] * weight_stride_u + w_idx[:, None] * weight_stride_dim, 
-                    mask=pos_mask[:, None] & u_mask[None, :])
+            w = tl.load(
+                weights_ptr
+                + u[None, :] * weight_stride_u
+                + w_idx[:, None] * weight_stride_dim,
+                mask=pos_mask[:, None] & u_mask[None, :],
+            )
             w = tl.broadcast_to(w[:, :, None], (BLOCK_DIM, BLOCK_U, BLOCK_B))
 
         product = x * y * vals * w
@@ -159,7 +164,7 @@ def tensor_product_kernel(
 
     tl.store(output_ptr + out_offsets, acc, mask=full_mask)
 
-    
+
 @triton_op("triton::flashallegro_forward", mutates_args={})
 def _flashallegro_forward(
     input1: torch.Tensor,
@@ -205,35 +210,57 @@ def _flashallegro_forward(
     )
     return output
 
+
 def setup_context(ctx, inputs, output):
-    
-    input1, input2, mode, \
-    indptr_fwd, indptr_bwd1, indptr_bwd2, \
-    l1s_fwd, l2s_fwd, vals_fwd, p_to_nnz_mapper_fwd, \
-    ks_bwd1, l2s_bwd1, vals_bwd1, p_to_nnz_mapper_bwd1, \
-    ks_bwd2, l1s_bwd2, vals_bwd2, p_to_nnz_mapper_bwd2, \
-    weights, OUTDIM, XDIM, YDIM, NNZ, output_dtype = inputs
+
+    (
+        input1,
+        input2,
+        mode,
+        indptr_fwd,
+        indptr_bwd1,
+        indptr_bwd2,
+        l1s_fwd,
+        l2s_fwd,
+        vals_fwd,
+        p_to_nnz_mapper_fwd,
+        ks_bwd1,
+        l2s_bwd1,
+        vals_bwd1,
+        p_to_nnz_mapper_bwd1,
+        ks_bwd2,
+        l1s_bwd2,
+        vals_bwd2,
+        p_to_nnz_mapper_bwd2,
+        weights,
+        OUTDIM,
+        XDIM,
+        YDIM,
+        NNZ,
+        output_dtype,
+    ) = inputs
     ctx.save_for_backward(
-            input1,
-            input2,
-            indptr_bwd1,
-            indptr_bwd2,
-            ks_bwd1,
-            l2s_bwd1,
-            vals_bwd1,
-            p_to_nnz_mapper_bwd1,
-            ks_bwd2,
-            l1s_bwd2,
-            vals_bwd2,
-            p_to_nnz_mapper_bwd2,
-            weights,
-        )
+        input1,
+        input2,
+        indptr_bwd1,
+        indptr_bwd2,
+        ks_bwd1,
+        l2s_bwd1,
+        vals_bwd1,
+        p_to_nnz_mapper_bwd1,
+        ks_bwd2,
+        l1s_bwd2,
+        vals_bwd2,
+        p_to_nnz_mapper_bwd2,
+        weights,
+    )
     ctx.mode = mode
     ctx.OUTDIM = OUTDIM
     ctx.XDIM = XDIM
     ctx.YDIM = YDIM
     ctx.NNZ = NNZ
     ctx.output_dtype = output_dtype
+
 
 def backward(ctx, grad_output):
     (
@@ -320,7 +347,9 @@ def backward(ctx, grad_output):
         None,
     )
 
+
 _flashallegro_forward.register_autograd(backward, setup_context=setup_context)
+
 
 def _metadata_helper(dim, coo, coovalue, p_to_nnz_values):
     sort_order = lexsort((coo[:, 2], coo[:, 1], coo[:, 0]))
@@ -454,7 +483,7 @@ def _triton_kernel_allegro(
         triton.cdiv(BATCH, META["BLOCK_B"]),
         triton.cdiv(UMAX, META["BLOCK_U"]),
         triton.cdiv(OUTDIM, META["BLOCK_DIM"]),
-        )
+    )
 
     wrap_triton(tensor_product_kernel)[grid](
         x_ptr=x,
