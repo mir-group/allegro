@@ -5,8 +5,8 @@ As Allegro is a `NequIP <https://github.com/mir-group/nequip>`_ extension packag
 This guide is more minimal and covers the API for the Allegro model and how one can compile Allegro models for use in LAMMPS.
 The Python API is relevant to learning about the hyperparameters of the Allegro model and is the recommended reference when configuring Allegro models in the config (``.yaml``) file.
 
- .. toctree::
+.. toctree::
 
-    allegro_model
-    accelerations
-    lammps
+   allegro_model
+   accelerations
+   lammps

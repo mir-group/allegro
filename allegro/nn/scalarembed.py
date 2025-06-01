@@ -36,7 +36,8 @@ def TwoBodyBesselScalarEmbed(
     The radial embedding and center-neighbor type embedding are multiplied.
 
     This module can be used for the ``scalar_embed`` argument of the ``AllegroModel`` in the config as follows.
-    ::
+
+    .. code-block:: yaml
 
       model:
         _target_: allegro.model.AllegroModel
@@ -85,7 +86,8 @@ class TwoBodySplineScalarEmbed(GraphModuleMixin, torch.nn.Module):
     r"""Two-body spline scalar embedding.
 
     This module can be used for the ``scalar_embed`` argument of the ``AllegroModel`` in the config as follows.
-    ::
+
+    .. code-block:: yaml
 
       model:
         _target_: allegro.model.AllegroModel

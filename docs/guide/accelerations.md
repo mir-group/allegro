@@ -7,12 +7,12 @@ To use this acceleration, one must specify an additional flag `--modifiers enabl
 
 ```bash
 nequip-compile \
---input-path path/to/ckpt_file/or/package_file \
---output-path path/to/compiled_model.nequip.pt2 \
---device (cpu/cuda) \
---mode aotinductor \
---target pair_allegro \
---modifiers enable_TritonContracter
+    path/to/ckpt_file/or/package_file \
+    path/to/compiled_model.nequip.pt2 \
+    --device [cpu|cuda] \
+    --mode aotinductor \
+    --target pair_allegro \
+    --modifiers enable_TritonContracter
 ```
 
 Note that `--target pair_allegro` means that one is compiling the model for use in LAMMPS.
