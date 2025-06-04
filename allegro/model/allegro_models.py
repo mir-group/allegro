@@ -68,7 +68,7 @@ def AllegroModel(**kwargs):
         type_names (Sequence[str]): list of atom type names
         l_max (int): maximum order :math:`\ell` to use in spherical harmonics embedding, 1 is baseline (fast), 2 is more accurate, but slower, 3 highly accurate but slow
         parity (bool): whether to include features with odd mirror parity (default ``True``)
-        radial_chemical_embed: an Allegro-compatible two-body radial-chemical embedding module, e.g. ``allegro.nn.TwoBodyBesselScalarEmbed``
+        radial_chemical_embed: an Allegro-compatible two-body radial-chemical embedding module, e.g. :class:`allegro.nn.TwoBodyBesselScalarEmbed`
         two_body_mlp_hidden_layers_depth (int): number of hidden layers of two-body MLP (default ``1``)
         two_body_mlp_hidden_layers_width (int): depth of hidden layers of two-body MLP
         two_body_mlp_nonlinearity (str): ``silu``, ``mish``, ``gelu``, or ``None`` (default ``silu``)
@@ -124,7 +124,6 @@ def FullAllegroEnergyModel(
     avg_num_neighbors: Optional[float] = None,
     # allegro layers defaults
     weight_individual_irreps: bool = True,
-    scatter_features: bool = False,
     # per atom energy params
     per_type_energy_scales: Optional[Union[float, Sequence[float]]] = None,
     per_type_energy_shifts: Optional[Union[float, Sequence[float]]] = None,
@@ -196,7 +195,6 @@ def FullAllegroEnergyModel(
         tp_path_channel_coupling=tp_path_channel_coupling,
         # best to use defaults for these
         weight_individual_irreps=weight_individual_irreps,
-        scatter_features=scatter_features,
         # fields
         tensor_basis_in_field=AtomicDataDict.EDGE_ATTRS_KEY,
         tensor_features_in_field=AtomicDataDict.EDGE_FEATURES_KEY,

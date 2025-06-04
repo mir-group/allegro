@@ -29,8 +29,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         avg_num_neighbors: Optional[float] = None,
         tp_path_channel_coupling: bool = False,  # "p" mode default (True is "uuup" mode)
         weight_individual_irreps: bool = True,
-        scatter_features: bool = True,
-        # ^ scatter V_ik, alternative is to scatter embedded environment w_ij Y_ij
         # MLP parameters:
         latent=ScalarMLPFunction,
         latent_kwargs={},
@@ -57,7 +55,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         self.num_layers = num_layers
         self.num_scalar_features = num_scalar_features
         self.num_tensor_features = num_tensor_features
-        self.scatter_features = scatter_features
         self.tensor_track_allowed_irreps = Irreps(tensor_track_allowed_irreps)
         assert set(mul for mul, ir in self.tensor_track_allowed_irreps) == {1}
 
@@ -167,13 +164,9 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         for layer_idx, (arg_irreps, out_irreps) in enumerate(
             zip(tps_irreps_in, tps_irreps_out)
         ):
-            # irin2 is the scattered feature
-            if self.scatter_features:
-                irin1 = env_embed_irreps
-                irin2 = arg_irreps
-            else:
-                irin1 = arg_irreps
-                irin2 = env_embed_irreps
+            # irin2 is the scattered feature (env_embed_irreps)
+            irin1 = arg_irreps
+            irin2 = env_embed_irreps
 
             # note that we set the multiplicity as 1 because the strided layout is incompatible with e3nn's data format
             tp = Contracter(
@@ -268,14 +261,10 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         for latent, tp in zip(self.latents, self.tps):
             # === Env Weight & TP ===
             env_w_edges = self._env_weighter(tensor_basis, env_w)
-            # depending on `self.scatter_features`, scatter `env_w_edges` or `tensor_features`, and TP them together
+            # scatter env_w_edges and TP with tensor_features
             # second input irreps is the one that is scattered
-            if self.scatter_features:
-                irin1 = env_w_edges
-                irin2 = tensor_features
-            else:
-                irin1 = tensor_features
-                irin2 = env_w_edges
+            irin1 = tensor_features
+            irin2 = env_w_edges
             tensor_features = tp(irin1, irin2, edge_center, num_atoms)
 
             # Extract invariants from tensor track

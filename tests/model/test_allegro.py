@@ -63,14 +63,6 @@ class TestAllegro(BaseEnergyModelTests):
         return request.param
 
     @pytest.fixture(
-        # only test default case of False to save time
-        params=[False],
-        scope="class",
-    )
-    def scatter_features(self, request):
-        return request.param
-
-    @pytest.fixture(
         params=[True, False],
         scope="class",
     )
@@ -97,7 +89,6 @@ class TestAllegro(BaseEnergyModelTests):
         request,
         scalar_embed_config,
         parity,
-        scatter_features,
         tp_path_channel_coupling,
         forward_normalize,
     ):
@@ -105,7 +96,6 @@ class TestAllegro(BaseEnergyModelTests):
         config = config.copy()
         config.update({"radial_chemical_embed": scalar_embed_config})
         config.update({"parity": parity})
-        config.update({"scatter_features": scatter_features})
         config.update({"tp_path_channel_coupling": tp_path_channel_coupling})
         config.update({"forward_normalize": forward_normalize})
         return config
