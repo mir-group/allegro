@@ -16,4 +16,4 @@ nequip-compile \
 ```
 
 Note that `--target pair_allegro` means that one is compiling the model for use in LAMMPS.
-This acceleration can also be used for other target integrations, e.g. for Python inference, one can use `--target ase` to be used with the [NequIP framework's ASE calculator](https://nequip.readthedocs.io/en/latest/api/ase.html).
+This acceleration can also be used for other target integrations, e.g. for Python inference, one can use `--target ase` to be used with the {external+nequip:doc}`NequIP framework's ASE calculator <api/ase>`.

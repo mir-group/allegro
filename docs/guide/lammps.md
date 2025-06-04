@@ -22,4 +22,4 @@ nequip-compile \
 
 ## LAMMPS Pair Style
 
-The `pair_nequip_allegro` [repository](https://github.com/mir-group/pair_nequip_allegro) is an interface to use NequIP framework interatomic potentials in LAMMPS, which contains `pair_allegro` that is meant to be used for the strictly local Allegro model, which supports parallel execution and MPI in LAMMPS.
+The [`pair_nequip_allegro`](https://github.com/mir-group/pair_nequip_allegro) is an interface to use NequIP framework interatomic potentials in LAMMPS, which contains `pair_allegro` that is meant to be used for the strictly local Allegro model, which supports parallel execution and MPI in LAMMPS.

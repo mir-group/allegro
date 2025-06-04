@@ -39,6 +39,7 @@ intersphinx_mapping = {
     "ase": ("https://wiki.fysik.dtu.dk/ase/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
     "e3nn": ("https://docs.e3nn.org/en/stable/", None),
+    "nequip": ("https://nequip.readthedocs.io/en/latest/", None),
     "torchmetrics": ("https://lightning.ai/docs/torchmetrics/stable/", None),
 }
 
