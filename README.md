@@ -4,6 +4,7 @@
 
 <br/>
 
+[![Documentation Status](https://readthedocs.org/projects/allegro/badge/?version=latest)](https://allegro.readthedocs.io/en/latest/?badge=latest)
 [![PyPI version](https://img.shields.io/pypi/v/nequip-allegro.svg)](https://pypi.python.org/pypi/nequip-allegro/)
 
 
