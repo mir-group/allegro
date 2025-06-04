@@ -6,10 +6,10 @@ from .scalarembed import TwoBodyBesselScalarEmbed, TwoBodySplineScalarEmbed
 from .tensorembed import TwoBodySphericalHarmonicTensorEmbed
 
 __all__ = [
-    Allegro_Module,
-    EdgewiseReduce,
-    ProductTypeEmbedding,
-    TwoBodyBesselScalarEmbed,
-    TwoBodySplineScalarEmbed,
-    TwoBodySphericalHarmonicTensorEmbed,
+    "Allegro_Module",
+    "EdgewiseReduce",
+    "ProductTypeEmbedding",
+    "TwoBodyBesselScalarEmbed",
+    "TwoBodySplineScalarEmbed",
+    "TwoBodySphericalHarmonicTensorEmbed",
 ]
