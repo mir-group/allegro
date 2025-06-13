@@ -66,6 +66,11 @@ training_module:
   model:
     _target_: allegro.model.AllegroModel
 
+    # If you have PyTorch >= 2.6.0 installed, and are training on GPUs, the following line uses torch.compile to speed up training
+    # for more details, see https://nequip.readthedocs.io/en/latest/guide/accelerations/pt2_compilation.html
+    compile_mode: compile
+    # ^ if you're using PyTorch <= 2.6.0, an error will be thrown -- comment out the line to avoid it
+
     # === basic model params ===
     seed: 456
     model_dtype: float32
