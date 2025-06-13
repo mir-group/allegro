@@ -70,14 +70,6 @@ class TestAllegro(BaseEnergyModelTests):
         return request.param
 
     @pytest.fixture(
-        # only test default case of True to save time
-        params=[True],
-        scope="class",
-    )
-    def forward_normalize(self, request):
-        return request.param
-
-    @pytest.fixture(
         params=[
             minimal_config0,
             minimal_config1,
@@ -90,12 +82,10 @@ class TestAllegro(BaseEnergyModelTests):
         scalar_embed_config,
         parity,
         tp_path_channel_coupling,
-        forward_normalize,
     ):
         config = request.param
         config = config.copy()
         config.update({"radial_chemical_embed": scalar_embed_config})
         config.update({"parity": parity})
         config.update({"tp_path_channel_coupling": tp_path_channel_coupling})
-        config.update({"forward_normalize": forward_normalize})
         return config
