@@ -31,6 +31,42 @@ from typing import Sequence, Union, Optional, Dict
 logger = RankedLogger(__name__, rank_zero_only=True)
 
 
+def _allegro_docstring(header: str) -> str:
+    """Generate common docstring for Allegro models with customizable header."""
+    return f"""{header}
+
+    Args:
+        seed (int): seed for reproducibility
+        model_dtype (str): ``float32`` or ``float64``
+        r_max (float): cutoff radius
+        per_edge_type_cutoff (Dict): one can optionally specify cutoffs for each edge type [must be smaller than ``r_max``] (default ``None``)
+        type_names (Sequence[str]): list of atom type names
+        l_max (int): maximum order :math:`\\ell` to use in spherical harmonics embedding, 1 is baseline (fast), 2 is more accurate, but slower, 3 highly accurate but slow
+        parity (bool): whether to include features with odd mirror parity (default ``True``)
+        radial_chemical_embed: an Allegro-compatible two-body radial-chemical embedding module, e.g. :class:`allegro.nn.TwoBodyBesselScalarEmbed`
+        two_body_mlp_hidden_layers_depth (int): number of hidden layers of two-body MLP (default ``1``)
+        two_body_mlp_hidden_layers_width (int): depth of hidden layers of two-body MLP
+        two_body_mlp_nonlinearity (str): ``silu``, ``mish``, ``gelu``, or ``None`` (default ``silu``)
+        scalar_embed_output_dim (int): output dimension of the scalar embedding module (default ``None`` will use ``num_scalar_features``)
+        num_layers (int): number of Allegro layers
+        num_scalar_features (int): multiplicity of scalar features in the Allegro layers
+        num_tensor_features (int): multiplicity of tensor features in the Allegro layers
+        allegro_mlp_hidden_layers_depth (int): number of hidden layers in the Allegro scalar MLPs (default ``1``)
+        allegro_mlp_hidden_layers_width (int): width of hidden layers in the Allegro scalar MLPs (reasonable to set it to be the same as ``num_scalar_features``)
+        allegro_mlp_nonlinearity (str): ``silu``, ``mish``, ``gelu``, or ``None`` (default ``silu``)
+        tp_path_channel_coupling (bool): whether Allegro tensor product weights couple the paths with the channels or not, ``True`` is expected to be more expressive than ``False`` (default ``True``)
+        readout_mlp_hidden_layers_depth (int): number of hidden layers in the readout MLP (default ``1``)
+        readout_mlp_hidden_layers_width (int): width of hidden layers in the readout MLP (reasonable to set it to be the same as ``num_scalar_features``)
+        readout_mlp_nonlinearity (str): ``silu``, ``mish``, ``gelu``, or ``None`` (default ``silu``)
+        avg_num_neighbors (float): used to normalize edge sums for better numerics (default ``None``)
+        per_type_energy_scales (float/List[float]): per-atom energy scales, which could be derived from the force RMS of the data (default ``None``)
+        per_type_energy_shifts (float/List[float]): per-atom energy shifts, which should generally be isolated atom reference energies or estimated from average pre-atom energies of the data (default ``None``)
+        per_type_energy_scales_trainable (bool): whether the per-atom energy scales are trainable (default ``False``)
+        per_type_energy_shifts_trainable (bool): whether the per-atom energy shifts are trainable (default ``False``)
+        pair_potential (torch.nn.Module): additional pair potential term, e.g. :class:``nequip.nn.pair_potential.ZBL`` (default ``None``)
+    """
+
+
 @model_builder
 def AllegroEnergyModel(
     l_max: int,
@@ -56,41 +92,21 @@ def AllegroEnergyModel(
     )
 
 
+# assign docstrings using the shared function
+AllegroEnergyModel.__doc__ = _allegro_docstring(
+    "Allegro model that predicts energies only."
+)
+
+
 @model_builder
 def AllegroModel(**kwargs):
-    r"""Allegro model that predicts energies and forces (and stresses if cell is provided).
-
-    Args:
-        seed (int): seed for reproducibility
-        model_dtype (str): ``float32`` or ``float64``
-        r_max (float): cutoff radius
-        per_edge_type_cutoff (Dict): one can optionally specify cutoffs for each edge type [must be smaller than ``r_max``] (default ``None``)
-        type_names (Sequence[str]): list of atom type names
-        l_max (int): maximum order :math:`\ell` to use in spherical harmonics embedding, 1 is baseline (fast), 2 is more accurate, but slower, 3 highly accurate but slow
-        parity (bool): whether to include features with odd mirror parity (default ``True``)
-        radial_chemical_embed: an Allegro-compatible two-body radial-chemical embedding module, e.g. :class:`allegro.nn.TwoBodyBesselScalarEmbed`
-        two_body_mlp_hidden_layers_depth (int): number of hidden layers of two-body MLP (default ``1``)
-        two_body_mlp_hidden_layers_width (int): depth of hidden layers of two-body MLP
-        two_body_mlp_nonlinearity (str): ``silu``, ``mish``, ``gelu``, or ``None`` (default ``silu``)
-        scalar_embed_output_dim (int): output dimension of the scalar embedding module (default ``None`` will use ``num_scalar_features``)
-        num_layers (int): number of Allegro layers
-        num_scalar_features (int): multiplicity of scalar features in the Allegro layers
-        num_tensor_features (int): multiplicity of tensor features in the Allegro layers
-        allegro_mlp_hidden_layers_depth (int): number of hidden layers in the Allegro scalar MLPs (default ``1``)
-        allegro_mlp_hidden_layers_width (int): width of hidden layers in the Allegro scalar MLPs (reasonable to set it to be the same as ``num_scalar_features``)
-        allegro_mlp_nonlinearity (str): ``silu``, ``mish``, ``gelu``, or ``None`` (default ``silu``)
-        tp_path_channel_coupling (bool): whether Allegro tensor product weights couple the paths with the channels or not, ``True`` is expected to be more expressive than ``False`` (default ``True``)
-        readout_mlp_hidden_layers_depth (int): number of hidden layers in the readout MLP (default ``1``)
-        readout_mlp_hidden_layers_width (int): width of hidden layers in the readout MLP (reasonable to set it to be the same as ``num_scalar_features``)
-        readout_mlp_nonlinearity (str): ``silu``, ``mish``, ``gelu``, or ``None`` (default ``silu``)
-        avg_num_neighbors (float): used to normalize edge sums for better numerics (default ``None``)
-        per_type_energy_scales (float/List[float]): per-atom energy scales, which could be derived from the force RMS of the data (default ``None``)
-        per_type_energy_shifts (float/List[float]): per-atom energy shifts, which should generally be isolated atom reference energies or estimated from average pre-atom energies of the data (default ``None``)
-        per_type_energy_scales_trainable (bool): whether the per-atom energy scales are trainable (default ``False``)
-        per_type_energy_shifts_trainable (bool): whether the per-atom energy shifts are trainable (default ``False``)
-        pair_potential (torch.nn.Module): additional pair potential term, e.g. :class:``nequip.nn.pair_potential.ZBL`` (default ``None``)
-    """
     return ForceStressOutput(AllegroEnergyModel(**kwargs))
+
+
+# assign docstring for the force+energy model
+AllegroModel.__doc__ = _allegro_docstring(
+    "Allegro model that predicts energies and forces (and stresses if cell is provided)."
+)
 
 
 @model_builder
