@@ -27,7 +27,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         tensor_track_allowed_irreps: Irreps,
         # optional hyperparameters:
         avg_num_neighbors: Optional[float] = None,
-        tp_path_channel_coupling: bool = False,  # "p" mode default (True is "uuup" mode)
+        tp_path_channel_coupling: bool = True,
         weight_individual_irreps: bool = True,
         # MLP parameters:
         latent=ScalarMLPFunction,
