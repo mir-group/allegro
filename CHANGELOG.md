@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Most recent change on the bottom.
 
 
+## [0.6.2]
+
+### Added
+- Exposed `AllegroEnergyModel` in docs
+
 ## [0.6.1]
 
 ### Removed
