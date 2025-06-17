@@ -7,8 +7,8 @@ COMMON_CONFIG = {
     "seed": 123,
     "type_names": ["H", "C", "O"],
     "r_max": 4.0,
-    "avg_num_neighbors": 5.0,  # very approximate to keep numerics sane
-    "radial_chemical_embed_dim": 8,
+    "avg_num_neighbors": 20.0,
+    "radial_chemical_embed_dim": 16,
     "scalar_embed_mlp_hidden_layers_depth": 1,
     "scalar_embed_mlp_hidden_layers_width": 32,
     "num_layers": 2,
@@ -32,7 +32,7 @@ minimal_config1 = dict(
 
 BESSEL_CONFIG = {
     "_target_": "allegro.nn.TwoBodyBesselScalarEmbed",
-    "num_bessels": 4,
+    "num_bessels": 8,
 }
 
 SPLINE_CONFIG = {
@@ -46,6 +46,10 @@ class TestAllegro(BaseEnergyModelTests):
     @pytest.fixture
     def strict_locality(self):
         return True
+
+    @pytest.fixture(scope="class")
+    def nequip_compile_tol(self, model_dtype):
+        return {"float32": 5e-5, "float64": 1e-10}[model_dtype]
 
     @pytest.fixture(
         params=[BESSEL_CONFIG, SPLINE_CONFIG],
