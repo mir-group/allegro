@@ -1,5 +1,13 @@
 import pytest
 from nequip.utils.unittests.model_tests import BaseEnergyModelTests
+from nequip.utils.versions import _TORCH_GE_2_6
+
+try:
+    import triton  # noqa: F401
+
+    _TRITON_INSTALLED = True
+except ImportError:
+    _TRITON_INSTALLED = False
 
 
 COMMON_CONFIG = {
@@ -93,3 +101,30 @@ class TestAllegro(BaseEnergyModelTests):
         config.update({"parity": parity})
         config.update({"tp_path_channel_coupling": tp_path_channel_coupling})
         return config
+
+    @pytest.fixture(
+        scope="class",
+        params=[None]
+        + (["enable_TritonContracter"] if _TORCH_GE_2_6 and _TRITON_INSTALLED else []),
+    )
+    def nequip_compile_acceleration_modifiers(self, request):
+        """Test acceleration modifiers in nequip-compile workflows."""
+        if request.param is None:
+            return None
+
+        def modifier_handler(mode, device):
+            if request.param == "enable_TritonContracter":
+
+                if mode == "torchscript":
+                    pytest.skip(
+                        "TritonContracter tests skipped for TorchScript compilation mode"
+                    )
+
+                if device == "cpu":
+                    pytest.skip("TritonContracter tests skipped for CPU")
+
+                return ["enable_TritonContracter"]
+            else:
+                raise ValueError(f"Unknown modifier: {request.param}")
+
+        return modifier_handler
