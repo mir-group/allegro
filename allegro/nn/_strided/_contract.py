@@ -274,6 +274,7 @@ class Contracter(torch.nn.Module):
                         scatter_factor=old.scatter_factor,
                         irrep_normalization=old.irrep_normalization,
                     )
+                new.load_state_dict(old.state_dict())
                 return new
             else:
                 return old
