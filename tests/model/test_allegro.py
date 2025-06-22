@@ -1,4 +1,6 @@
 import pytest
+import torch
+import copy
 from nequip.utils.unittests.model_tests import BaseEnergyModelTests
 from nequip.utils.versions import _TORCH_GE_2_6
 
@@ -128,3 +130,39 @@ class TestAllegro(BaseEnergyModelTests):
                 raise ValueError(f"Unknown modifier: {request.param}")
 
         return modifier_handler
+
+    @pytest.mark.skipif(
+        not (_TORCH_GE_2_6 and _TRITON_INSTALLED),
+        reason="TritonContracter requires torch >= 2.6 and triton",
+    )
+    def test_triton_contracter_consistency(
+        self, model, model_test_data, device, nequip_compile_tol
+    ):
+        """Test that TritonContracter-enabled model produces consistent results with original model."""
+        if device == "cpu":
+            pytest.skip("TritonContracter tests skipped for CPU")
+
+        original_model, config, _ = model
+
+        # create TritonContracter-enabled model
+        triton_config = copy.deepcopy(config)
+        triton_config = {
+            "_target_": "nequip.model.modify",
+            "modifiers": [{"modifier": "enable_TritonContracter"}],
+            "model": triton_config,
+        }
+        triton_model = self.make_model(triton_config, device=device)
+        triton_model.eval()
+        # NOTE: intentionally not transferring state dicts, because it should be handled by the modifier
+
+        # compare
+        original_output = original_model(model_test_data.copy())
+        triton_output = triton_model(model_test_data.copy())
+        for key in ["atomic_energy", "total_energy", "forces"]:
+            if key in original_output and key in triton_output:
+                assert torch.allclose(
+                    original_output[key],
+                    triton_output[key],
+                    rtol=nequip_compile_tol,
+                    atol=nequip_compile_tol,
+                ), f"Outputs differ for key {key}: max diff = {torch.max(torch.abs(original_output[key] - triton_output[key])).item()}"
