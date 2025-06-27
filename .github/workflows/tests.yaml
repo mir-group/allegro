@@ -57,6 +57,12 @@ jobs:
         # install nequip packages
         pip install --upgrade-strategy only-if-needed ./nequip
         pip install --upgrade-strategy only-if-needed .
+        if python3 -c "import torch; exit(0 if torch.cuda.is_available() else 1)"; then
+          echo "Installing CuEquivariance (CUDA available)"
+          pip install cuequivariance-torch cuequivariance-ops-torch-cu12
+        else
+          echo "Skipping OpenEquivariance installation (CUDA not available)"
+        fi
     - name: Run tests
       run: |
         # See https://github.com/pytest-dev/pytest/issues/1075 for why we need to set PYTHONHASHSEED
