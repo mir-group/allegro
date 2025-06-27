@@ -281,5 +281,33 @@ class Contracter(torch.nn.Module):
 
         return replace_submodules(model, cls, factory)
 
+    @model_modifier(persistent=False)
+    @classmethod
+    def enable_CuEquivarianceContracter(cls, model):
+        """Enable CuEquivariance tensor product kernel for accelerated Allegro training and inference."""
+
+        from ._cueq_contracter import CuEquivarianceContracter
+
+        def factory(old):
+            # build-time conditions for using kernel
+            if old.num_paths > 1:
+                with torch_default_dtype(old.w3j.dtype):
+                    new = CuEquivarianceContracter(
+                        irreps_in1=old.irreps_in1,
+                        irreps_in2=old.irreps_in2,
+                        irreps_out=old.irreps_out,
+                        mul=old.mul,
+                        instructions=old.instructions,
+                        path_channel_coupling=old.path_channel_coupling,
+                        scatter_factor=old.scatter_factor,
+                        irrep_normalization=old.irrep_normalization,
+                    )
+                new.load_state_dict(old.state_dict())
+                return new
+            else:
+                return old
+
+        return replace_submodules(model, cls, factory)
+
     def extra_repr(self):
         return f"{self.irreps_in1} x {self.irreps_in2} -> {self.irreps_out} | {self.mul} channels | {self.num_paths} paths"
