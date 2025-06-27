@@ -11,6 +11,14 @@ try:
 except ImportError:
     _TRITON_INSTALLED = False
 
+try:
+    import cuequivariance  # noqa: F401
+    import cuequivariance_torch  # noqa: F401
+
+    _CUEQUIVARIANCE_INSTALLED = True
+except ImportError:
+    _CUEQUIVARIANCE_INSTALLED = False
+
 
 COMMON_CONFIG = {
     "_target_": "allegro.model.AllegroModel",
@@ -107,7 +115,8 @@ class TestAllegro(BaseEnergyModelTests):
     @pytest.fixture(
         scope="class",
         params=[None]
-        + (["enable_TritonContracter"] if _TORCH_GE_2_6 and _TRITON_INSTALLED else []),
+        + (["enable_TritonContracter"] if _TORCH_GE_2_6 and _TRITON_INSTALLED else [])
+        + (["enable_CuEquivarianceContracter"] if _CUEQUIVARIANCE_INSTALLED else []),
     )
     def nequip_compile_acceleration_modifiers(self, request):
         """Test acceleration modifiers in nequip-compile workflows."""
@@ -126,6 +135,36 @@ class TestAllegro(BaseEnergyModelTests):
                     pytest.skip("TritonContracter tests skipped for CPU")
 
                 return ["enable_TritonContracter"]
+
+            elif request.param == "enable_CuEquivarianceContracter":
+
+                if device == "cpu":
+                    pytest.skip("CuEquivarianceContracter tests skipped for CPU")
+
+                return ["enable_CuEquivarianceContracter"]
+
+            else:
+                raise ValueError(f"Unknown modifier: {request.param}")
+
+        return modifier_handler
+
+    @pytest.fixture(
+        scope="class",
+        params=[None]
+        + (["enable_CuEquivarianceContracter"] if _CUEQUIVARIANCE_INSTALLED else []),
+    )
+    def train_time_compile_acceleration_modifiers(self, request):
+        """Test acceleration modifiers in train-time compile workflows."""
+        if request.param is None:
+            return None
+
+        def modifier_handler(device):
+            if request.param == "enable_CuEquivarianceContracter":
+
+                if device == "cpu":
+                    pytest.skip("CuEquivarianceContracter tests skipped for CPU")
+
+                return [{"modifier": "enable_CuEquivarianceContracter"}]
             else:
                 raise ValueError(f"Unknown modifier: {request.param}")
 
@@ -153,9 +192,9 @@ class TestAllegro(BaseEnergyModelTests):
         }
         triton_model = self.make_model(triton_config, device=device)
         triton_model.eval()
-        # NOTE: intentionally not transferring state dicts, because it should be handled by the modifier
+        triton_model.load_state_dict(original_model.state_dict())
 
-        # compare
+        # test
         original_output = original_model(model_test_data.copy())
         triton_output = triton_model(model_test_data.copy())
         for key in ["atomic_energy", "total_energy", "forces"]:
@@ -166,3 +205,28 @@ class TestAllegro(BaseEnergyModelTests):
                     rtol=nequip_compile_tol,
                     atol=nequip_compile_tol,
                 ), f"Outputs differ for key {key}: max diff = {torch.max(torch.abs(original_output[key] - triton_output[key])).item()}"
+
+    @pytest.mark.skipif(
+        not _CUEQUIVARIANCE_INSTALLED,
+        reason="CuEquivarianceContracter requires cuequivariance",
+    )
+    def test_cuequivariance_contracter_consistency(
+        self, model, model_test_data, device, nequip_compile_tol
+    ):
+        """Test that CuEquivarianceContracter-enabled model produces consistent results with original model."""
+        original_model, config, _ = model
+
+        # create CuEquivariance-enabled model
+        cueq_config = copy.deepcopy(config)
+        cueq_config = {
+            "_target_": "nequip.model.modify",
+            "modifiers": [{"modifier": "enable_CuEquivarianceContracter"}],
+            "model": cueq_config,
+        }
+        cueq_model = self.make_model(cueq_config, device=device)
+        cueq_model.load_state_dict(original_model.state_dict())
+
+        # test
+        self.compare_output_and_gradients(
+            original_model, cueq_model, model_test_data, nequip_compile_tol
+        )
