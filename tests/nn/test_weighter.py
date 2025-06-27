@@ -6,7 +6,7 @@ from e3nn import o3
 from e3nn.util.test import assert_auto_jitable, assert_equivariant
 
 from allegro.nn._strided import MakeWeightedChannels
-from test_contract import _strided_to_cat
+from test_contract_basic import _strided_to_cat
 
 
 @pytest.mark.parametrize("irreps_in", ["0e + 1o", "0e + 1o + 2e + 3o"])
