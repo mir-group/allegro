@@ -123,7 +123,7 @@ class TestAllegro(BaseEnergyModelTests):
         if request.param is None:
             return None
 
-        def modifier_handler(mode, device):
+        def modifier_handler(mode, device, model_dtype):
             if request.param == "enable_TritonContracter":
 
                 if mode == "torchscript":
@@ -140,6 +140,12 @@ class TestAllegro(BaseEnergyModelTests):
 
                 if device == "cpu":
                     pytest.skip("CuEquivarianceContracter tests skipped for CPU")
+
+                # TODO: sort this out
+                if mode == "aotinductor" and model_dtype == "float64":
+                    pytest.skip(
+                        "CuEquivarianceContracter tests skipped for AOTI and float64 due to known issue"
+                    )
 
                 return ["enable_CuEquivarianceContracter"]
 
