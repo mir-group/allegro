@@ -6,7 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Most recent change on the bottom.
 
+## [0.7.0]
 
+### Added
+- CuEquivariance acceleration for Allegro models (training and inference)
 
 ## [0.6.3]
 
@@ -33,7 +36,6 @@ Most recent change on the bottom.
 
 ### Changed
 - bound `nequip` version under 0.8.0
-
 
 ## [0.5.0]
 
