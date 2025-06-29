@@ -116,7 +116,11 @@ class TestAllegro(BaseEnergyModelTests):
         scope="class",
         params=[None]
         + (["enable_TritonContracter"] if _TORCH_GE_2_6 and _TRITON_INSTALLED else [])
-        + (["enable_CuEquivarianceContracter"] if _CUEQUIVARIANCE_INSTALLED else []),
+        + (
+            ["enable_CuEquivarianceContracter"]
+            if _TORCH_GE_2_6 and _CUEQUIVARIANCE_INSTALLED
+            else []
+        ),
     )
     def nequip_compile_acceleration_modifiers(self, request):
         """Test acceleration modifiers in nequip-compile workflows."""
@@ -157,7 +161,11 @@ class TestAllegro(BaseEnergyModelTests):
     @pytest.fixture(
         scope="class",
         params=[None]
-        + (["enable_CuEquivarianceContracter"] if _CUEQUIVARIANCE_INSTALLED else []),
+        + (
+            ["enable_CuEquivarianceContracter"]
+            if _TORCH_GE_2_6 and _CUEQUIVARIANCE_INSTALLED
+            else []
+        ),
     )
     def train_time_compile_acceleration_modifiers(self, request):
         """Test acceleration modifiers in train-time compile workflows."""
@@ -213,7 +221,7 @@ class TestAllegro(BaseEnergyModelTests):
                 ), f"Outputs differ for key {key}: max diff = {torch.max(torch.abs(original_output[key] - triton_output[key])).item()}"
 
     @pytest.mark.skipif(
-        not _CUEQUIVARIANCE_INSTALLED,
+        not (_TORCH_GE_2_6 and _CUEQUIVARIANCE_INSTALLED),
         reason="CuEquivarianceContracter requires cuequivariance",
     )
     def test_cuequivariance_contracter_consistency(

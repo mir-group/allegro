@@ -27,7 +27,7 @@ except ImportError:
 @pytest.mark.parametrize(
     "kernel_type",
     (["triton"] if (_TORCH_GE_2_6 and _TRITON_INSTALLED) else [])
-    + (["cueq"] if _CUEQ_INSTALLED else []),
+    + (["cueq"] if (_TORCH_GE_2_6 and _CUEQ_INSTALLED) else []),
 )
 @pytest.mark.parametrize("irreps_in1", ["0e + 0o + 1e + 1o", "2o + 1e + 0e"])
 @pytest.mark.parametrize("irreps_in2", ["0e + 0o + 1e + 1o"])
