@@ -8,20 +8,24 @@ from nequip.utils import torch_default_dtype, dtype_from_name
 from nequip.utils.versions import _TORCH_GE_2_6
 from allegro.nn._strided import Contracter
 
-try:
-    import triton  # noqa: F401
+_TRITON_INSTALLED = False
+_CUEQ_INSTALLED = False
 
-    _TRITON_INSTALLED = True
-except ImportError:
-    _TRITON_INSTALLED = False
+if _TORCH_GE_2_6:
+    try:
+        import triton  # noqa: F401
 
-try:
-    import cuequivariance  # noqa: F401
-    import cuequivariance_torch  # noqa: F401
+        _TRITON_INSTALLED = True
+    except ImportError:
+        pass
 
-    _CUEQ_INSTALLED = True
-except ImportError:
-    _CUEQ_INSTALLED = False
+    try:
+        import cuequivariance  # noqa: F401
+        import cuequivariance_torch  # noqa: F401
+
+        _CUEQ_INSTALLED = True
+    except ImportError:
+        pass
 
 
 @pytest.mark.parametrize(

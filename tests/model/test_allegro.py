@@ -4,20 +4,24 @@ import copy
 from nequip.utils.unittests.model_tests import BaseEnergyModelTests
 from nequip.utils.versions import _TORCH_GE_2_6
 
-try:
-    import triton  # noqa: F401
+_TRITON_INSTALLED = False
+_CUEQ_INSTALLED = False
 
-    _TRITON_INSTALLED = True
-except ImportError:
-    _TRITON_INSTALLED = False
+if _TORCH_GE_2_6:
+    try:
+        import triton  # noqa: F401
 
-try:
-    import cuequivariance  # noqa: F401
-    import cuequivariance_torch  # noqa: F401
+        _TRITON_INSTALLED = True
+    except ImportError:
+        pass
 
-    _CUEQUIVARIANCE_INSTALLED = True
-except ImportError:
-    _CUEQUIVARIANCE_INSTALLED = False
+    try:
+        import cuequivariance  # noqa: F401
+        import cuequivariance_torch  # noqa: F401
+
+        _CUEQ_INSTALLED = True
+    except ImportError:
+        pass
 
 
 COMMON_CONFIG = {
@@ -118,7 +122,7 @@ class TestAllegro(BaseEnergyModelTests):
         + (["enable_TritonContracter"] if _TORCH_GE_2_6 and _TRITON_INSTALLED else [])
         + (
             ["enable_CuEquivarianceContracter"]
-            if _TORCH_GE_2_6 and _CUEQUIVARIANCE_INSTALLED
+            if _TORCH_GE_2_6 and _CUEQ_INSTALLED
             else []
         ),
     )
@@ -163,7 +167,7 @@ class TestAllegro(BaseEnergyModelTests):
         params=[None]
         + (
             ["enable_CuEquivarianceContracter"]
-            if _TORCH_GE_2_6 and _CUEQUIVARIANCE_INSTALLED
+            if _TORCH_GE_2_6 and _CUEQ_INSTALLED
             else []
         ),
     )
@@ -221,7 +225,7 @@ class TestAllegro(BaseEnergyModelTests):
                 ), f"Outputs differ for key {key}: max diff = {torch.max(torch.abs(original_output[key] - triton_output[key])).item()}"
 
     @pytest.mark.skipif(
-        not (_TORCH_GE_2_6 and _CUEQUIVARIANCE_INSTALLED),
+        not (_TORCH_GE_2_6 and _CUEQ_INSTALLED),
         reason="CuEquivarianceContracter requires cuequivariance",
     )
     def test_cuequivariance_contracter_consistency(
