@@ -28,13 +28,12 @@ training_module:
     modifiers:
       - modifier: enable_CuEquivarianceContracter
     model:
-      _target_: allegro.model.Allegro
-      seed: 123
-      model_dtype: float32
-      r_max: 5.0
-      num_layers: 4
-      l_max: 2
+      _target_: allegro.model.AllegroModel
+
       # ... your standard Allegro model configuration ...
+
+      compile_mode: compile
+      # ^ CuEquivariance composes with train-time compilation
 ```
 
 CuEquivariance composes with [`torch.compile`](https://pytorch.org/docs/stable/generated/torch.compile.html), and can be used in conjunction with [train-time compilation](https://nequip.readthedocs.io/en/latest/guide/accelerations/pt2_compilation.html).
