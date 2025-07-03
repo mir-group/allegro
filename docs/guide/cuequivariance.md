@@ -88,3 +88,5 @@ atoms.calc = calc
 energy = atoms.get_potential_energy()
 forces = atoms.get_forces()
 ```
+
+If cuequivariance is not imported before model loading, this error will be thrown: `RuntimeError: Could not find schema for cuequivariance_ops::tensor_product_uniform_1d_jit`
