@@ -70,10 +70,9 @@ nequip-compile \
     --modifiers enable_CuEquivarianceContracter
 ```
 
-To use the compiled model, you must import cuequivariance before loading:
+To use the compiled model, you must import `cuequivariance_torch` before loading:
 
 ```python
-import cuequivariance
 import cuequivariance_torch
 from nequip.ase import NequIPCalculator
 
