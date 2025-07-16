@@ -1,9 +1,6 @@
 # This file is a part of the `allegro` package. Please see LICENSE and README at the root for information on using it.
 import torch
 
-import cuequivariance as cue
-import cuequivariance_torch as cuet
-
 from nequip.nn import scatter
 from ._contract import Contracter
 
@@ -11,12 +8,16 @@ import itertools
 from typing import Dict
 
 
+# we do lazy imports of cueq to allow `nequip-package` to pick this file up even if cueq is not installed
+# since `nequip-package` ignores files if it errors on loading the file
+
+
 def allegro_tp_desc(
-    irreps1: cue.Irreps,
-    irreps2: cue.Irreps,
-    irreps3: cue.Irreps,
+    irreps1,
+    irreps2,
+    irreps3,
     tp_path_channel_coupling: bool,
-) -> cue.EquivariantPolynomial:
+):
     """Construct the Allegro version of channelwise tensor product descriptor.
 
     subscripts: ``weights[u],lhs[iu],rhs[ju],output[ku]``
@@ -26,6 +27,8 @@ def allegro_tp_desc(
         irreps2 (Irreps): Irreps of the second operand.
         irreps3 (Irreps): Irreps of the output to consider.
     """
+    import cuequivariance as cue
+
     common_mul = irreps1[0].mul
 
     if tp_path_channel_coupling:
@@ -64,6 +67,9 @@ class CuEquivarianceContracter(Contracter):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
+        import cuequivariance_torch as cuet
+        import cuequivariance as cue
 
         ir1 = cue.Irreps("O3", [(self.mul, ir) for _, ir in self.irreps_in1])
         ir2 = cue.Irreps("O3", [(self.mul, ir) for _, ir in self.irreps_in2])
