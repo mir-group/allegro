@@ -63,6 +63,8 @@ training_module:
   # ^ IMPORTANT: Allegro models do better with learning rates around 1e-3
 
   # to use the Allegro model in the NequIP framework, the following `model` block has to be changed to be that of Allegro's
+  # see Allegro model docs for explanation of model hyperparameters:
+  # https://nequip.readthedocs.io/projects/allegro/en/latest/guide/allegro_model.html
   model:
     _target_: allegro.model.AllegroModel
 
@@ -141,9 +143,9 @@ training_module:
 
     # per-type per-atom scales and shifts
     per_type_energy_shifts: ${training_data_stats:per_atom_energy_mean}
-    # ^ this should typically be the isolated atom energies for your dataset
-    #   provided as a dict, e.g.
-    # per_type_energy_shifts: 
+    # ^ IMPORTANT: it is usually useful and important to use isolated atom energies computed with the same method used to generate the training data
+    #   they should be provided as a dict, e.g.
+    # per_type_energy_shifts:
     #   C: 1.234
     #   H: 2.345
     #   O: 3.456
