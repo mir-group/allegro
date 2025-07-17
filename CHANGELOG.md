@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Most recent change on the bottom.
 
+
+## [0.7.1]
+
+### Fixed
+- `nequip-package` will now always pick up Triton (even if packaging without GPUs) and CuEq files (even if CuEq is not installed at package-time)
+
 ## [0.7.0]
 
 ### Added
