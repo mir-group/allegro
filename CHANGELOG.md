@@ -12,6 +12,10 @@ Most recent change on the bottom.
 ### Fixed
 - `nequip-package` will now always pick up Triton (even if packaging without GPUs) and CuEq files (even if CuEq is not installed at package-time)
 
+### Changed
+- bound `nequip` version >=0.13.0
+
+
 ## [0.7.0]
 
 ### Added
