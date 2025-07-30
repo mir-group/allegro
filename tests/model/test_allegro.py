@@ -188,6 +188,24 @@ class TestAllegro(BaseEnergyModelTests):
 
         return modifier_handler
 
+    @pytest.fixture(
+        scope="class",
+        params=[None]
+        + (["enable_TritonContracter"] if _TORCH_GE_2_6 and _TRITON_INSTALLED else [])
+        + (
+            ["enable_CuEquivarianceContracter"]
+            if _TORCH_GE_2_6 and _CUEQ_INSTALLED
+            else []
+        ),
+    )
+    def mliap_acceleration_modifiers(self, request):
+        """Test acceleration modifiers in MLIAP workflows."""
+
+        def modifier_handler(compile, model_dtype):
+            return [] if request.param is None else [request.param]
+
+        return modifier_handler
+
     @pytest.mark.skipif(
         not (_TORCH_GE_2_6 and _TRITON_INSTALLED),
         reason="TritonContracter requires torch >= 2.6 and triton",
