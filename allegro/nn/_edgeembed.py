@@ -42,9 +42,9 @@ class ProductTypeEmbedding(GraphModuleMixin, torch.nn.Module):
         self.num_types = len(type_names)
 
         # == type embedding ==
-        assert (
-            initial_embedding_dim % 2 == 0
-        ), "`initial_embedding_dim` must be an even number"
+        assert initial_embedding_dim % 2 == 0, (
+            "`initial_embedding_dim` must be an even number"
+        )
 
         self.center_embed = torch.nn.Embedding(
             num_embeddings=self.num_types,

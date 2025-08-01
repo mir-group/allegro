@@ -64,7 +64,6 @@ def allegro_tp_desc(
 
 
 class CuEquivarianceContracter(Contracter):
-
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -89,7 +88,6 @@ class CuEquivarianceContracter(Contracter):
         idxs: torch.Tensor,
         scatter_dim_size: int,
     ) -> torch.Tensor:
-
         # NOTE: the reason for some duplicated code is because TorchScript doesn't support super() calls
         # see https://github.com/pytorch/pytorch/issues/42885
 

@@ -270,7 +270,6 @@ def FullAllegroEnergyModel(
     # === pair potentials ===
     prev_irreps_out = per_type_energy_scale_shift.irreps_out
     if pair_potential is not None:
-
         # case where model doesn't have edge cutoffs up to this point, but pair potential required
         if AtomicDataDict.EDGE_CUTOFF_KEY not in prev_irreps_out:
             cutoff = AddRadialCutoffToData(

@@ -47,9 +47,9 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             num_layers >= 1
         )  # zero layers is "two body", but we don't need to support that fallback case
 
-        assert (
-            avg_num_neighbors is not None
-        ), "`avg_num_neighbors` must be set for Allegro models, but `avg_num_neighbors=None` found"
+        assert avg_num_neighbors is not None, (
+            "`avg_num_neighbors` must be set for Allegro models, but `avg_num_neighbors=None` found"
+        )
 
         # === save parameters ===
         self.num_layers = num_layers
@@ -99,9 +99,9 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         self.tps = torch.nn.ModuleList([])
 
         env_embed_irreps = Irreps([(1, ir) for _, ir in input_irreps])
-        assert (
-            env_embed_irreps[0].ir == SCALAR
-        ), "env_embed_irreps must start with scalars"
+        assert env_embed_irreps[0].ir == SCALAR, (
+            "env_embed_irreps must start with scalars"
+        )
 
         arg_irreps = env_embed_irreps
 

@@ -28,10 +28,10 @@ jobs:
           python3 -m pip install --upgrade pip
       - name: Linting
         run: |
-            pip install flake8==7.1.0 Flake8-pyproject black yamllint
-            flake8 allegro/ --count --show-source --statistics
-            black allegro/ --check
-            yamllint .
+          pip install ruff yamllint
+          ruff check .
+          ruff format --check .
+          yamllint .
       - name: Install git
         run: |
           apt install git -y

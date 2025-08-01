@@ -61,7 +61,6 @@ if torch.cuda.is_available():
         BLOCK_DIM: tl.constexpr,
         output_dtype: tl.constexpr,
     ):
-
         # Program IDs remain the same
         pid_b = tl.program_id(0)
         pid_dim = tl.program_id(1)
@@ -184,7 +183,6 @@ if torch.cuda.is_available():
         BLOCK_DIM: tl.constexpr,
         output_dtype: tl.constexpr,
     ):
-
         # Calculate program IDs
         pid_b = tl.program_id(0)
         pid_u = tl.program_id(1)
@@ -296,12 +294,12 @@ if torch.cuda.is_available():
         indptr = torch.cumsum(indptr, dim=0)
 
         # Assert that all values fit within int16 range
-        assert torch.all(
-            indptr <= torch.iinfo(torch.int16).max
-        ), "Values in indptr exceed int16 max value"
-        assert torch.all(
-            indptr >= torch.iinfo(torch.int16).min
-        ), "Values in indptr exceed int16 min value"
+        assert torch.all(indptr <= torch.iinfo(torch.int16).max), (
+            "Values in indptr exceed int16 max value"
+        )
+        assert torch.all(indptr >= torch.iinfo(torch.int16).min), (
+            "Values in indptr exceed int16 min value"
+        )
 
         # Cast to int16 after validation
         indptr = indptr.to(dtype=torch.int16)
@@ -314,7 +312,6 @@ if torch.cuda.is_available():
         return indptr, l1s, l2s, vals, p_to_nnz_mapper
 
     def _initialize_metadata(w3j):
-
         assert len(w3j.shape) == 4
         P, I, J, K = w3j.shape
 
@@ -332,12 +329,12 @@ if torch.cuda.is_available():
         del nzidx, w3j_sum, w3j
 
         # Assert that all values fit within int16 range
-        assert torch.all(
-            p_to_nnz_mapper <= torch.iinfo(torch.int16).max
-        ), "Values in p_to_nnz_mapper exceed int16 max value"
-        assert torch.all(
-            p_to_nnz_mapper >= torch.iinfo(torch.int16).min
-        ), "Values in p_to_nnz_mapper exceed int16 min value"
+        assert torch.all(p_to_nnz_mapper <= torch.iinfo(torch.int16).max), (
+            "Values in p_to_nnz_mapper exceed int16 max value"
+        )
+        assert torch.all(p_to_nnz_mapper >= torch.iinfo(torch.int16).min), (
+            "Values in p_to_nnz_mapper exceed int16 min value"
+        )
 
         # Cast to int16 after validation
         p_to_nnz_mapper = p_to_nnz_mapper.to(dtype=torch.int16)
@@ -403,7 +400,6 @@ if torch.cuda.is_available():
         # Acc dtype
         output_dtype: torch.dtype,
     ) -> torch.Tensor:
-
         output_dtype = TORCH_TRITON_DTYPE_MAPPER[output_dtype]
 
         BATCH = x.shape[0]
@@ -675,7 +671,6 @@ if torch.cuda.is_available():
 
 
 class TritonContracter(Contracter):
-
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 

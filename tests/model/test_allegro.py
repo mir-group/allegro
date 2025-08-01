@@ -133,7 +133,6 @@ class TestAllegro(BaseEnergyModelTests):
 
         def modifier_handler(mode, device, model_dtype):
             if request.param == "enable_TritonContracter":
-
                 if mode == "torchscript":
                     pytest.skip(
                         "TritonContracter tests skipped for TorchScript compilation mode"
@@ -145,7 +144,6 @@ class TestAllegro(BaseEnergyModelTests):
                 return ["enable_TritonContracter"]
 
             elif request.param == "enable_CuEquivarianceContracter":
-
                 if device == "cpu":
                     pytest.skip("CuEquivarianceContracter tests skipped for CPU")
 
@@ -178,7 +176,6 @@ class TestAllegro(BaseEnergyModelTests):
 
         def modifier_handler(device):
             if request.param == "enable_CuEquivarianceContracter":
-
                 if device == "cpu":
                     pytest.skip("CuEquivarianceContracter tests skipped for CPU")
 
@@ -240,7 +237,9 @@ class TestAllegro(BaseEnergyModelTests):
                     triton_output[key],
                     rtol=nequip_compile_tol,
                     atol=nequip_compile_tol,
-                ), f"Outputs differ for key {key}: max diff = {torch.max(torch.abs(original_output[key] - triton_output[key])).item()}"
+                ), (
+                    f"Outputs differ for key {key}: max diff = {torch.max(torch.abs(original_output[key] - triton_output[key])).item()}"
+                )
 
     @pytest.mark.skipif(
         not (_TORCH_GE_2_6 and _CUEQ_INSTALLED),
