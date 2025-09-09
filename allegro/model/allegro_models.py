@@ -10,6 +10,7 @@ from nequip.nn import (
     AtomwiseReduce,
     PerTypeScaleShift,
     ForceStressOutput,
+    AvgNumNeighborsNorm,
 )
 
 from nequip.nn.embedding import (
@@ -175,13 +176,22 @@ def FullAllegroModel(
         irreps_in=scalar_embed_mlp.irreps_out,
     )
 
+    # === normalization module ===
+    assert avg_num_neighbors is not None, (
+        "`avg_num_neighbors` must be set for Allegro models, but `avg_num_neighbors=None` found"
+    )
+    avg_num_neighbors_norm = AvgNumNeighborsNorm(
+        avg_num_neighbors=avg_num_neighbors,
+        type_names=type_names
+    )
+
     # === allegro module ===
     allegro = Allegro_Module(
         num_layers=num_layers,
         num_scalar_features=num_scalar_features,
         num_tensor_features=num_tensor_features,
         tensor_track_allowed_irreps=tensor_track_allowed_irreps,
-        avg_num_neighbors=avg_num_neighbors,
+        avg_num_neighbors_norm=avg_num_neighbors_norm,
         # MLP
         latent_kwargs={
             "hidden_layers_depth": allegro_mlp_hidden_layers_depth,
@@ -224,7 +234,8 @@ def FullAllegroModel(
     edge_eng_sum = EdgewiseReduce(
         field=AtomicDataDict.EDGE_ENERGY_KEY,
         out_field=AtomicDataDict.PER_ATOM_ENERGY_KEY,
-        factor=1.0 / math.sqrt(2 * avg_num_neighbors),
+        norm_module=avg_num_neighbors_norm,
+        #factor=1.0 / math.sqrt(2 * avg_num_neighbors),
         # ^ factor of 2 to normalize dE/dr_i which includes both contributions from dE/dr_ij and every other derivative against r_ji
         irreps_in=edge_readout.irreps_out,
     )

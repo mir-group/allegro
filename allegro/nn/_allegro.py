@@ -1,5 +1,5 @@
 # This file is a part of the `allegro` package. Please see LICENSE and README at the root for information on using it.
-from typing import Optional
+from typing import Optional, Union, Sequence
 import math
 import functools
 
@@ -9,7 +9,7 @@ from e3nn.o3._irreps import Irrep, Irreps
 from e3nn.util.jit import compile_mode
 
 from nequip.data import AtomicDataDict
-from nequip.nn import GraphModuleMixin, ScalarMLPFunction, tp_path_exists
+from nequip.nn import GraphModuleMixin, ScalarMLPFunction, tp_path_exists, AvgNumNeighborsNorm
 
 from ._strided import Contracter, MakeWeightedChannels
 
@@ -26,7 +26,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         num_tensor_features: int,
         tensor_track_allowed_irreps: Irreps,
         # optional hyperparameters:
-        avg_num_neighbors: Optional[float] = None,
+        avg_num_neighbors_norm: torch.nn.Module = None,
         tp_path_channel_coupling: bool = True,
         weight_individual_irreps: bool = True,
         # MLP parameters:
@@ -47,9 +47,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             num_layers >= 1
         )  # zero layers is "two body", but we don't need to support that fallback case
 
-        assert avg_num_neighbors is not None, (
-            "`avg_num_neighbors` must be set for Allegro models, but `avg_num_neighbors=None` found"
-        )
 
         # === save parameters ===
         self.num_layers = num_layers
@@ -92,6 +89,10 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             output_dim=self.num_scalar_features + self._env_weighter.weight_numel,
         )
         assert not self.first_layer_env_embed_projection.is_nonlinear
+
+        # === set up normalization ===
+        if avg_num_neighbors_norm is not None:
+            self.avg_num_neighbors_norm = avg_num_neighbors_norm
 
         # === set up Allegro layers ===
         latent = functools.partial(latent, **latent_kwargs)
@@ -175,11 +176,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
                 irreps_out=Irreps([(1, ir) for _, ir in out_irreps]),
                 mul=self.num_tensor_features,
                 path_channel_coupling=tp_path_channel_coupling,
-                # `scatter_factor` is the same for both forward and backwards normalization
-                # for forward normalization, it accounts for `scatter`
-                # for backward normalization, it accounts for `index_select`
-                # NOTE: `avg_num_neighbors` is not `None` because of the assert earlier
-                scatter_factor=1.0 / math.sqrt(avg_num_neighbors),
             )
             self.tps.append(tp)
             # we extract the scalars from the first irrep of the tp
@@ -257,6 +253,9 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             projection, -1, self.num_scalar_features, self._env_weighter.weight_numel
         )
 
+        # Get normalization tensor
+        scatter_norm = self.avg_num_neighbors_norm(data, num_atoms).unsqueeze(-1)
+
         layer_index: int = 0
         for latent, tp in zip(self.latents, self.tps):
             # === Env Weight & TP ===
@@ -265,7 +264,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             # second input irreps is the one that is scattered
             irin1 = tensor_features
             irin2 = env_w_edges
-            tensor_features = tp(irin1, irin2, edge_center, num_atoms)
+            tensor_features = tp(irin1, irin2, edge_center, num_atoms, scatter_norm)
 
             # Extract invariants from tensor track
             # features has shape [z][mul][k], where scalars are first

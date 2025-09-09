@@ -2,9 +2,9 @@
 import torch
 
 from nequip.data import AtomicDataDict
-from nequip.nn import GraphModuleMixin, scatter
+from nequip.nn import GraphModuleMixin, scatter, AvgNumNeighborsNorm
 
-from typing import Optional
+from typing import Optional, Sequence
 
 
 class EdgewiseReduce(GraphModuleMixin, torch.nn.Module):
@@ -16,7 +16,7 @@ class EdgewiseReduce(GraphModuleMixin, torch.nn.Module):
         self,
         field: str,
         out_field: Optional[str] = None,
-        factor: Optional[float] = None,
+        norm_module: Optional[torch.nn.Module] = None,
         reduce="sum",
         irreps_in={},
     ):
@@ -33,20 +33,14 @@ class EdgewiseReduce(GraphModuleMixin, torch.nn.Module):
                 else {}
             ),
         )
-        self._factor = None
-        if factor is not None:
-            self._factor = factor
+        self.norm_module = None
+        if norm_module is not None:
+            self.norm_module = norm_module
 
     def forward(self, data: AtomicDataDict.Type) -> AtomicDataDict.Type:
         # get destination nodes 🚂
         edge_dst = data[AtomicDataDict.EDGE_INDEX_KEY][0]
         edge_data = data[self.field]
-
-        # === scale ===
-        # for numerics it seems safer to make these smaller first before accumulating
-        factor: Optional[float] = self._factor  # torchscript hack for typing
-        if factor is not None:
-            edge_data = edge_data * factor
 
         # === scatter ===
         out = scatter(
@@ -56,5 +50,10 @@ class EdgewiseReduce(GraphModuleMixin, torch.nn.Module):
             dim_size=AtomicDataDict.num_nodes(data),
             reduce=self.reduce,
         )
+        # === scale ===
+        if self.norm_module is not None:
+            factor = self.norm_module(data,AtomicDataDict.num_nodes(data))
+            out = out * factor
+
         data[self.out_field] = out
         return data

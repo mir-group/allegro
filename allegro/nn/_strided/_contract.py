@@ -188,13 +188,8 @@ class Contracter(torch.nn.Module):
         x2: torch.Tensor,
         idxs: torch.Tensor,
         scatter_dim_size: int,
+        scatter_norm: torch.Tensor,
     ) -> torch.Tensor:
-        # === optional scatter + index_select ===
-        # normalize if normalization provided
-
-        if self.scatter_factor is not None:
-            x2 = self.scatter_factor * x2
-
         # scatter and index select
         x2_scatter = scatter(
             x2,
@@ -202,6 +197,8 @@ class Contracter(torch.nn.Module):
             dim=0,
             dim_size=scatter_dim_size,
         )
+        # normalization
+        x2_scatter = x2_scatter * scatter_norm
 
         # === perform TP ===
         # convert to strided shape
