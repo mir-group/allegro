@@ -88,12 +88,10 @@ class CuEquivarianceContracter(Contracter):
         x2: torch.Tensor,
         idxs: torch.Tensor,
         scatter_dim_size: int,
+        scatter_norm: torch.Tensor,
     ) -> torch.Tensor:
         # NOTE: the reason for some duplicated code is because TorchScript doesn't support super() calls
         # see https://github.com/pytorch/pytorch/issues/42885
-
-        if self.scatter_factor is not None:
-            x2 = self.scatter_factor * x2
 
         x2_scatter = scatter(
             x2,
@@ -101,6 +99,8 @@ class CuEquivarianceContracter(Contracter):
             dim=0,
             dim_size=scatter_dim_size,
         )
+
+        x2_scatter = x2_scatter * scatter_norm
 
         if x1.is_cuda and self.num_paths >= 1:
             empty_dict: Dict[int, torch.Tensor] = {}  # for torchscript
