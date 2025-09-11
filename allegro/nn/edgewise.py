@@ -4,7 +4,8 @@ import torch
 from nequip.data import AtomicDataDict
 from nequip.nn import GraphModuleMixin, scatter, AvgNumNeighborsNorm
 
-from typing import Optional, Sequence
+from typing import Optional
+from math import sqrt
 
 
 class EdgewiseReduce(GraphModuleMixin, torch.nn.Module):
@@ -52,8 +53,10 @@ class EdgewiseReduce(GraphModuleMixin, torch.nn.Module):
         )
         # === scale ===
         if self.norm_module is not None:
-            factor = self.norm_module(data,AtomicDataDict.num_nodes(data))
-            out = out * factor
+            factor = self.norm_module(data, AtomicDataDict.num_nodes(data))
+            out = out * (factor / sqrt(2))
+            # ^ factor of 2 to normalize dE/dr_i which includes both contributions from dE/dr_ij
+            # and every other derivative against r_ji.
 
         data[self.out_field] = out
         return data

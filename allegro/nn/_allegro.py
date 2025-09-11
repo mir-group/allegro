@@ -9,7 +9,12 @@ from e3nn.o3._irreps import Irrep, Irreps
 from e3nn.util.jit import compile_mode
 
 from nequip.data import AtomicDataDict
-from nequip.nn import GraphModuleMixin, ScalarMLPFunction, tp_path_exists, AvgNumNeighborsNorm
+from nequip.nn import (
+    GraphModuleMixin,
+    ScalarMLPFunction,
+    tp_path_exists,
+    AvgNumNeighborsNorm,
+)
 
 from ._strided import Contracter, MakeWeightedChannels
 
@@ -46,7 +51,6 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         assert (
             num_layers >= 1
         )  # zero layers is "two body", but we don't need to support that fallback case
-
 
         # === save parameters ===
         self.num_layers = num_layers
