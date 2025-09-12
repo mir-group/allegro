@@ -4,7 +4,7 @@ import torch
 from nequip.data import AtomicDataDict
 from nequip.nn import GraphModuleMixin, scatter, AvgNumNeighborsNorm
 
-from typing import Optional
+from typing import Optional, Union, Dict, Sequence
 from math import sqrt
 
 
@@ -17,7 +17,8 @@ class EdgewiseReduce(GraphModuleMixin, torch.nn.Module):
         self,
         field: str,
         out_field: Optional[str] = None,
-        norm_module: Optional[torch.nn.Module] = None,
+        avg_num_neighbors: Union[float, Dict[str, float]] = None,
+        type_names: Sequence[str] = None,
         reduce="sum",
         irreps_in={},
     ):
@@ -34,9 +35,9 @@ class EdgewiseReduce(GraphModuleMixin, torch.nn.Module):
                 else {}
             ),
         )
-        self.norm_module = None
-        if norm_module is not None:
-            self.norm_module = norm_module
+        self.norm_module = AvgNumNeighborsNorm(
+            avg_num_neighbors=avg_num_neighbors, type_names=type_names
+        )
 
     def forward(self, data: AtomicDataDict.Type) -> AtomicDataDict.Type:
         # get destination nodes 🚂
@@ -52,11 +53,10 @@ class EdgewiseReduce(GraphModuleMixin, torch.nn.Module):
             reduce=self.reduce,
         )
         # === scale ===
-        if self.norm_module is not None:
-            factor = self.norm_module(data, AtomicDataDict.num_nodes(data))
-            out = out * (factor / sqrt(2))
-            # ^ factor of 2 to normalize dE/dr_i which includes both contributions from dE/dr_ij
-            # and every other derivative against r_ji.
+        factor = self.norm_module(data)[: AtomicDataDict.num_nodes(data)]
+        out = out * (factor / sqrt(2))
+        # ^ factor of 2 to normalize dE/dr_i which includes both contributions from dE/dr_ij
+        # and every other derivative against r_ji.
 
         data[self.out_field] = out
         return data

@@ -1,6 +1,5 @@
 # This file is a part of the `allegro` package. Please see LICENSE and README at the root for information on using it.
-from typing import Optional, Union, Sequence
-import math
+from typing import Optional, Union, Sequence, Dict
 import functools
 
 import torch
@@ -31,7 +30,8 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         num_tensor_features: int,
         tensor_track_allowed_irreps: Irreps,
         # optional hyperparameters:
-        avg_num_neighbors_norm: torch.nn.Module = None,
+        avg_num_neighbors: Union[float, Dict[str, float]] = None,
+        type_names: Sequence[str] = None,
         tp_path_channel_coupling: bool = True,
         weight_individual_irreps: bool = True,
         # MLP parameters:
@@ -94,9 +94,10 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         )
         assert not self.first_layer_env_embed_projection.is_nonlinear
 
-        # === set up normalization ===
-        if avg_num_neighbors_norm is not None:
-            self.avg_num_neighbors_norm = avg_num_neighbors_norm
+        # === normalization module ===
+        self.avg_num_neighbors_norm = AvgNumNeighborsNorm(
+            avg_num_neighbors=avg_num_neighbors, type_names=type_names
+        )
 
         # === set up Allegro layers ===
         latent = functools.partial(latent, **latent_kwargs)
@@ -258,7 +259,7 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
         )
 
         # Get normalization tensor
-        scatter_norm = self.avg_num_neighbors_norm(data, num_atoms).unsqueeze(-1)
+        scatter_norm = self.avg_num_neighbors_norm(data)[:num_atoms].unsqueeze(-1)
 
         layer_index: int = 0
         for latent, tp in zip(self.latents, self.tps):
