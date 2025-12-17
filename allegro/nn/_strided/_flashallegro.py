@@ -5,6 +5,7 @@ from torch.library import triton_op, wrap_triton
 import triton
 import triton.language as tl
 
+from nequip.nn import scatter
 from ._contract import Contracter
 from ._lexsort import lexsort
 
@@ -23,9 +24,9 @@ if torch.cuda.is_available():
 
     @triton.autotune(
         configs=[
-            triton.Config({"BLOCK_B": 16, "BLOCK_DIM": 16}, num_warps=4, num_stages=2)
+            triton.Config({"BLOCK_E": 16, "BLOCK_DIM": 16}, num_warps=4, num_stages=2)
         ],
-        key=["BATCH", "XDIM", "YDIM", "OUTDIM", "UMAX", "NNZ"],
+        key=["EDIM", "XDIM", "YDIM", "OUTDIM", "UMAX", "NNZ"],
     )
     @triton.jit
     def tensor_product_p_kernel(
@@ -42,8 +43,10 @@ if torch.cuda.is_available():
         vals_ptr,
         # Weights
         weights_ptr,
+        # Index array
+        idxs_ptr,
         # Matrix dimensions
-        BATCH,
+        EDIM,
         XDIM,
         YDIM,
         OUTDIM,
@@ -57,7 +60,7 @@ if torch.cuda.is_available():
         output_stride_dim,
         output_stride_batch,
         # Grid level blocks
-        BLOCK_B: tl.constexpr,
+        BLOCK_E: tl.constexpr,
         BLOCK_DIM: tl.constexpr,
         output_dtype: tl.constexpr,
     ):
@@ -66,7 +69,7 @@ if torch.cuda.is_available():
         pid_dim = tl.program_id(1)
 
         # Initialize accumulator
-        acc = tl.zeros((BLOCK_DIM, BLOCK_B), dtype=output_dtype)
+        acc = tl.zeros((BLOCK_DIM, BLOCK_E), dtype=output_dtype)
 
         # Sparse iteration setup
         start_ptr = tl.load(
@@ -84,9 +87,14 @@ if torch.cuda.is_available():
             pos = start_ptr + p
             pos_mask = pos < end_ptr
 
-            b = (pid_b * BLOCK_B) + tl.arange(0, BLOCK_B)
+            b = (pid_b * BLOCK_E) + tl.arange(0, BLOCK_E)
 
-            b_mask = b < (BATCH * UMAX)
+            b_mask = b < (EDIM * UMAX)
+
+            # Extract edge index and channel index from flattened b
+            edge_idx = b // UMAX
+            channel_idx = b % UMAX
+            edge_mask = edge_idx < EDIM
 
             x_idx = tl.load(
                 x_idx_ptr + pos, mask=pos_mask, eviction_policy="evict_first"
@@ -99,13 +107,18 @@ if torch.cuda.is_available():
             )
             vals = tl.load(vals_ptr + pos, mask=pos_mask, eviction_policy="evict_first")
 
+            # Load atom indices from idxs array
+            atom_idx = tl.load(idxs_ptr + edge_idx, mask=edge_mask, other=0)
+
             # Create load mask
             load_mask = pos_mask[:, None] & b_mask[None, :]
 
             # Calculate input offsets
             x_offsets = b[None, :] * x_stride_batch + x_idx[:, None]
 
-            y_offsets = b[None, :] * y_stride_batch + y_idx[:, None]
+            # Reconstruct flattened index using atom_idx instead of edge_idx
+            y_flat_idx = atom_idx * UMAX + channel_idx
+            y_offsets = y_flat_idx[None, :] * y_stride_batch + y_idx[:, None]
 
             # Load inputs and compute
             x = tl.load(x_ptr + x_offsets, mask=load_mask)
@@ -116,14 +129,14 @@ if torch.cuda.is_available():
             acc = tl.where(load_mask, acc + product, acc)
 
         # Calculate output offsets
-        out_offsets = ((pid_b * BLOCK_B) + tl.arange(0, BLOCK_B))[
+        out_offsets = ((pid_b * BLOCK_E) + tl.arange(0, BLOCK_E))[
             None, :
         ] * output_stride_batch + ((pid_dim * BLOCK_DIM) + tl.arange(0, BLOCK_DIM))[
             :, None
         ] * output_stride_dim
 
         # Create combined mask for output
-        full_mask = (((pid_b * BLOCK_B) + tl.arange(0, BLOCK_B)) < (BATCH * UMAX))[
+        full_mask = (((pid_b * BLOCK_E) + tl.arange(0, BLOCK_E)) < (EDIM * UMAX))[
             None, :
         ] & (((pid_dim * BLOCK_DIM) + tl.arange(0, BLOCK_DIM)) < OUTDIM)[:, None]
 
@@ -132,7 +145,7 @@ if torch.cuda.is_available():
     @triton.autotune(
         configs=[
             triton.Config(
-                {"BLOCK_B": 8, "BLOCK_U": 8, "BLOCK_DIM": 16},
+                {"BLOCK_E": 8, "BLOCK_U": 8, "BLOCK_DIM": 16},
                 num_warps=4,
                 num_stages=3,
                 maxnreg=(
@@ -140,7 +153,7 @@ if torch.cuda.is_available():
                 ),
             )
         ],
-        key=["BATCH", "XDIM", "YDIM", "OUTDIM", "UMAX", "NNZ"],
+        key=["EDIM", "XDIM", "YDIM", "OUTDIM", "UMAX", "NNZ"],
     )
     @triton.jit
     def tensor_product_up_kernel(
@@ -157,8 +170,10 @@ if torch.cuda.is_available():
         vals_ptr,
         # Weights
         weights_ptr,
+        # Index array
+        idxs_ptr,
         # Matrix dimensions
-        BATCH,
+        EDIM,
         XDIM,
         YDIM,
         OUTDIM,
@@ -178,7 +193,7 @@ if torch.cuda.is_available():
         weight_stride_u,
         weight_stride_dim,
         # Block sizes
-        BLOCK_B: tl.constexpr,
+        BLOCK_E: tl.constexpr,
         BLOCK_U: tl.constexpr,
         BLOCK_DIM: tl.constexpr,
         output_dtype: tl.constexpr,
@@ -189,7 +204,7 @@ if torch.cuda.is_available():
         pid_dim = tl.program_id(2)
 
         # Initialize accumulator
-        acc = tl.zeros((BLOCK_DIM, BLOCK_U, BLOCK_B), dtype=output_dtype)
+        acc = tl.zeros((BLOCK_DIM, BLOCK_U, BLOCK_E), dtype=output_dtype)
 
         # Sparse iteration setup
         start_ptr = tl.load(
@@ -207,11 +222,14 @@ if torch.cuda.is_available():
             pos = start_ptr + p
             pos_mask = pos < end_ptr
 
-            b = (pid_b * BLOCK_B) + tl.arange(0, BLOCK_B)
+            b = (pid_b * BLOCK_E) + tl.arange(0, BLOCK_E)
             u = (pid_u * BLOCK_U) + tl.arange(0, BLOCK_U)
 
-            b_mask = b < BATCH
+            b_mask = b < EDIM
             u_mask = u < UMAX
+
+            # Load atom indices from idxs array
+            atom_idx = tl.load(idxs_ptr + b, mask=b_mask, other=0)
 
             x_idx = tl.load(
                 x_idx_ptr + pos, mask=pos_mask, eviction_policy="evict_first"
@@ -239,8 +257,9 @@ if torch.cuda.is_available():
                 + x_idx[:, None, None]
             )
 
+            # Use atom_idx instead of b for y offsets
             y_offsets = (
-                b[None, None, :] * y_stride_batch
+                atom_idx[None, None, :] * y_stride_batch
                 + u[None, :, None] * y_stride_u
                 + y_idx[:, None, None]
             )
@@ -253,8 +272,8 @@ if torch.cuda.is_available():
             y = tl.load(y_ptr + y_offsets, mask=load_mask)
             w = tl.load(weights_ptr + w_offsets, mask=load_mask_w)
 
-            vals = tl.broadcast_to(vals[:, None, None], (BLOCK_DIM, BLOCK_U, BLOCK_B))
-            w = tl.broadcast_to(w[:, :, None], (BLOCK_DIM, BLOCK_U, BLOCK_B))
+            vals = tl.broadcast_to(vals[:, None, None], (BLOCK_DIM, BLOCK_U, BLOCK_E))
+            w = tl.broadcast_to(w[:, :, None], (BLOCK_DIM, BLOCK_U, BLOCK_E))
 
             product = x * y * vals * w
             acc = tl.where(load_mask, acc + product, acc)
@@ -262,7 +281,7 @@ if torch.cuda.is_available():
         # Store results
         # Calculate output offsets
         out_offsets = (
-            ((pid_b * BLOCK_B) + tl.arange(0, BLOCK_B))[None, None, :]
+            ((pid_b * BLOCK_E) + tl.arange(0, BLOCK_E))[None, None, :]
             * output_stride_batch
             + ((pid_u * BLOCK_U) + tl.arange(0, BLOCK_U))[None, :, None]
             * output_stride_u
@@ -272,7 +291,7 @@ if torch.cuda.is_available():
 
         # Create combined mask for output
         full_mask = (
-            (((pid_b * BLOCK_B) + tl.arange(0, BLOCK_B)) < BATCH)[None, None, :]
+            (((pid_b * BLOCK_E) + tl.arange(0, BLOCK_E)) < EDIM)[None, None, :]
             & (((pid_u * BLOCK_U) + tl.arange(0, BLOCK_U)) < UMAX)[None, :, None]
             & (((pid_dim * BLOCK_DIM) + tl.arange(0, BLOCK_DIM)) < OUTDIM)[
                 :, None, None
@@ -383,6 +402,8 @@ if torch.cuda.is_available():
         # Pointers to matrices
         x: torch.Tensor,
         y: torch.Tensor,
+        # Index array
+        idxs: torch.Tensor,
         # Pointers to sparse data
         indptr: torch.Tensor,
         x_idx: torch.Tensor,
@@ -402,23 +423,24 @@ if torch.cuda.is_available():
     ) -> torch.Tensor:
         output_dtype = TORCH_TRITON_DTYPE_MAPPER[output_dtype]
 
-        BATCH = x.shape[0]
+        EDIM = x.shape[0]  # num_edges (batch dimension of x)
+        NDIM = y.shape[0]  # num_nodes/atoms (batch dimension of y)
         UMAX = x.shape[1]
 
         if mode == "p":
-            output = torch.empty((BATCH * UMAX, OUTDIM), dtype=x.dtype, device=x.device)
+            output = torch.empty((EDIM * UMAX, OUTDIM), dtype=x.dtype, device=x.device)
             grid = lambda META: (  # noqa: E731
-                triton.cdiv(BATCH * UMAX, META["BLOCK_B"]),
+                triton.cdiv(EDIM * UMAX, META["BLOCK_E"]),
                 triton.cdiv(OUTDIM, META["BLOCK_DIM"]),
             )
 
-            x = x.reshape(BATCH * UMAX, -1)
-            y = y.reshape(BATCH * UMAX, -1)
+            x = x.reshape(EDIM * UMAX, -1)
+            y = y.reshape(NDIM * UMAX, -1)
 
         elif mode == "up":
-            output = torch.empty((BATCH, UMAX, OUTDIM), dtype=x.dtype, device=x.device)
+            output = torch.empty((EDIM, UMAX, OUTDIM), dtype=x.dtype, device=x.device)
             grid = lambda META: (  # noqa: E731
-                triton.cdiv(BATCH, META["BLOCK_B"]),
+                triton.cdiv(EDIM, META["BLOCK_E"]),
                 triton.cdiv(UMAX, META["BLOCK_U"]),
                 triton.cdiv(OUTDIM, META["BLOCK_DIM"]),
             )
@@ -430,13 +452,14 @@ if torch.cuda.is_available():
                 x_ptr=x,
                 y_ptr=y,
                 output_ptr=output,
+                idxs_ptr=idxs,
                 indptr_ptr=indptr,
                 x_idx_ptr=x_idx,
                 y_idx_ptr=y_idx,
                 p_to_nnz_mapper_ptr=p_to_nnz_mapper,
                 vals_ptr=vals,
                 weights_ptr=weights,
-                BATCH=BATCH,
+                EDIM=EDIM,
                 OUTDIM=OUTDIM,
                 XDIM=XDIM,
                 YDIM=YDIM,
@@ -456,13 +479,14 @@ if torch.cuda.is_available():
                 x_ptr=x,
                 y_ptr=y,
                 output_ptr=output,
+                idxs_ptr=idxs,
                 indptr_ptr=indptr,
                 x_idx_ptr=x_idx,
                 y_idx_ptr=y_idx,
                 p_to_nnz_mapper_ptr=p_to_nnz_mapper,
                 vals_ptr=vals,
                 weights_ptr=weights,
-                BATCH=BATCH,
+                EDIM=EDIM,
                 OUTDIM=OUTDIM,
                 XDIM=XDIM,
                 YDIM=YDIM,
@@ -484,12 +508,13 @@ if torch.cuda.is_available():
             )
         else:
             raise ValueError("Invalid mode")
-        return output.reshape(BATCH, UMAX, OUTDIM)
+        return output.reshape(EDIM, UMAX, OUTDIM)
 
     @triton_op("triton::flashallegro_forward", mutates_args={})
     def _flashallegro_forward(
         input1: torch.Tensor,
         input2: torch.Tensor,
+        idxs: torch.Tensor,
         mode: str,
         indptr_fwd: torch.Tensor,
         indptr_bwd1: torch.Tensor,
@@ -517,6 +542,7 @@ if torch.cuda.is_available():
             mode,
             input1,
             input2,
+            idxs,
             indptr_fwd,
             l1s_fwd,
             l2s_fwd,
@@ -534,6 +560,7 @@ if torch.cuda.is_available():
         (
             input1,
             input2,
+            idxs,
             mode,
             indptr_fwd,
             indptr_bwd1,
@@ -561,6 +588,7 @@ if torch.cuda.is_available():
         ctx.save_for_backward(
             input1,
             input2,
+            idxs,
             indptr_bwd1,
             indptr_bwd2,
             ks_bwd1,
@@ -584,6 +612,7 @@ if torch.cuda.is_available():
         (
             input1,
             input2,
+            idxs,
             indptr_bwd1,
             indptr_bwd2,
             ks_bwd1,
@@ -609,6 +638,7 @@ if torch.cuda.is_available():
             mode,
             grad_output,
             input2,
+            idxs,
             indptr_bwd1,
             ks_bwd1,
             l2s_bwd1,
@@ -621,10 +651,15 @@ if torch.cuda.is_available():
             NNZ,
             output_dtype,
         )
-        grad_input2 = _triton_kernel_allegro(
+        # Create identity mapping for grad_input2 (input1 is already edge-indexed)
+        identity_idxs = torch.arange(
+            input1.shape[0], device=input1.device, dtype=idxs.dtype
+        )
+        grad_input2_edges = _triton_kernel_allegro(
             mode,
             grad_output,
             input1,
+            identity_idxs,
             indptr_bwd2,
             ks_bwd2,
             l1s_bwd2,
@@ -637,10 +672,14 @@ if torch.cuda.is_available():
             NNZ,
             output_dtype,
         )
+        # TODO: maybe have a fused backward kernel
+        # scatter edge gradients back to nodes
+        grad_input2 = scatter(grad_input2_edges, idxs, dim=0, dim_size=input2.shape[0])
 
         return (
             grad_input1,
             grad_input2,
+            None,  # idxs
             None,  # mode
             None,  # indptr_fwd
             None,  # indptr_bwd1
@@ -725,11 +764,10 @@ class TritonContracter(Contracter):
     def _contract_conv(self, x1, x2, idxs):
         # runtime conditions for triggering kernel code path
         if x1.is_cuda and not self.training:
-            # index select for triton kernel
-            x2_indexed = torch.index_select(x2, 0, idxs)
             return torch.ops.triton.flashallegro_forward(
                 x1,
-                x2_indexed,
+                x2,
+                idxs,
                 self.mode,
                 self.indptr_fwd,
                 self.indptr_bwd1,
