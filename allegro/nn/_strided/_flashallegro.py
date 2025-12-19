@@ -24,7 +24,7 @@ if torch.cuda.is_available():
 
     @triton.autotune(
         configs=[
-            triton.Config({"BLOCK_E": 16, "BLOCK_DIM": 16}, num_warps=4, num_stages=2)
+            triton.Config({"BLOCK_E": 32, "BLOCK_DIM": 16}, num_warps=1, num_stages=1),
         ],
         key=["EDIM", "XDIM", "YDIM", "OUTDIM", "UMAX", "NNZ"],
     )
@@ -145,13 +145,17 @@ if torch.cuda.is_available():
     @triton.autotune(
         configs=[
             triton.Config(
-                {"BLOCK_E": 8, "BLOCK_U": 8, "BLOCK_DIM": 16},
-                num_warps=4,
-                num_stages=3,
-                maxnreg=(
-                    128 if "nvidia" in torch.cuda.get_device_name(0).lower() else None
-                ),
-            )
+                {"BLOCK_E": 8, "BLOCK_U": 8, "BLOCK_DIM": 16}, num_warps=1, num_stages=1
+            ),
+            triton.Config(
+                {"BLOCK_E": 8, "BLOCK_U": 8, "BLOCK_DIM": 16}, num_warps=1, num_stages=2
+            ),
+            triton.Config(
+                {"BLOCK_E": 8, "BLOCK_U": 8, "BLOCK_DIM": 16}, num_warps=2, num_stages=1
+            ),
+            triton.Config(
+                {"BLOCK_E": 8, "BLOCK_U": 8, "BLOCK_DIM": 16}, num_warps=2, num_stages=2
+            ),
         ],
         key=["EDIM", "XDIM", "YDIM", "OUTDIM", "UMAX", "NNZ"],
     )
