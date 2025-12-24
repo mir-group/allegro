@@ -218,12 +218,7 @@ class Contracter(torch.nn.Module):
         # for shared weights, we can precontract weights and w3j so they can be frozen together
         # this is usually advantageous for inference, since the weights would have to be
         # multiplied in anyway at some point
-        # `up, pijk -> uijk`` or `p, pijk -> ijk`
-        if self.num_paths >= 1:
-            ww3j = torch.einsum(self._weight_w3j_einstr, self.weights, self.w3j)
-        else:
-            # account for `_, ijk -> ijk`, i.e. single path case
-            ww3j = self.w3j
+        ww3j = torch.einsum(self._weight_w3j_einstr, self.weights, self.w3j)
 
         # now do the TP with the pre-contracted w3j
         if self.w3j_is_ij_diagonal:
