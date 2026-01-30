@@ -16,31 +16,50 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# yamllint disable rule:line-length
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pre-commit
+        run: pip install pre-commit
+      - name: Run pre-commit
+        run: pre-commit run --all-files --show-diff-on-failure
 
   tests:
+    needs: lint
     runs-on: ${{ github.event.repository.private == true && 'self-hosted' || 'ubuntu-latest' }}
     strategy:
       matrix:
         torch-version: [2.2.0, "2.*"]
     container:
-      image: nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
+      image: nvidia/cuda:12.6.1-cudnn-devel-ubuntu24.04
       options: ${{ github.event.repository.private && '--gpus all' || ' ' }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install Python
+      - name: Install Python and create venv
         run: |
-          apt update && apt install -y python3 python3-pip
-          python3 -m pip install --upgrade pip
-      - name: Linting
+          apt update && apt install -y python3 python3-pip python3-venv git
+          python3 -m venv /opt/venv
+          echo "/opt/venv/bin" >> $GITHUB_PATH
+      - name: Check Python version
         run: |
-          pip install ruff yamllint
-          ruff check .
-          ruff format --check .
-          yamllint .
-      - name: Install git
+          python3 --version
+          which python3
+      - name: Disable pip cache
         run: |
-          apt install git -y
+          echo "PIP_NO_CACHE_DIR=1" >> $GITHUB_ENV
+          echo "PIP_NO_CACHE=1" >> $GITHUB_ENV
+      - name: Configure torch cache directories
+        run: |
+          echo "TORCH_EXTENSIONS_DIR=/tmp/torch_extensions_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}" >> $GITHUB_ENV
+          echo "TORCHINDUCTOR_CACHE_DIR=/tmp/torchinductor_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}" >> $GITHUB_ENV
+          echo "TRITON_CACHE_DIR=/tmp/triton_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}" >> $GITHUB_ENV
       - name: Clone NequIP packages
         uses: mir-group/nequip-gh-actions/clone@main
         with:
@@ -82,3 +101,4 @@ jobs:
         if: always()
         run: |
           rm -rf ./allegro
+# yamllint enable
