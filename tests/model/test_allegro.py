@@ -257,6 +257,9 @@ class TestAllegro(TorchSimIntegrationMixin, LAMMPSMLIAPIntegrationMixin):
         self, model, model_test_data, device, nequip_compile_tol
     ):
         """Test that CuEquivarianceContracter-enabled model produces consistent results with original model."""
+        if device == "cpu":
+            pytest.skip("CuEquivarianceContracter tests skipped for CPU")
+
         original_model, config, _ = model
 
         # create CuEquivariance-enabled model
