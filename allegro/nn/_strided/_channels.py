@@ -48,7 +48,12 @@ class MakeWeightedChannels(torch.nn.Module):
             # r runs over all irreps, which is why the weights need
             # to be indexed in order to go from [r] to [i]
             # [zu]r @ ri -> [zu]i -> zui
-            aux = torch.mm(weights.reshape(-1, self._num_irreps), self._rtoi).view(
+            aux = torch.mm(
+                weights.reshape(
+                    weights.size(0) * self.multiplicity_out, self._num_irreps
+                ),
+                self._rtoi,
+            ).view(
                 edge_attr.size(0),
                 self.multiplicity_out,
                 self._rtoi.shape[1],
