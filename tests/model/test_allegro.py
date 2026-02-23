@@ -1,8 +1,11 @@
 import pytest
 import torch
 import copy
+from nequip.utils.unittests.model_tests_ase_integration import ASEIntegrationMixin
+from nequip.utils.unittests.model_tests_train_time_compile import TrainTimeCompileMixin
 from nequip.utils.unittests.model_tests_lammps import LAMMPSMLIAPIntegrationMixin
 from nequip.utils.unittests.model_tests_torchsim import TorchSimIntegrationMixin
+from nequip.utils.unittests.utils import compare_output_and_gradients
 from nequip.utils.versions import _TORCH_GE_2_6
 
 _TRITON_INSTALLED = False
@@ -65,13 +68,18 @@ SPLINE_CONFIG = {
 }
 
 
-class TestAllegro(TorchSimIntegrationMixin, LAMMPSMLIAPIntegrationMixin):
+class TestAllegro(
+    TrainTimeCompileMixin,
+    ASEIntegrationMixin,
+    TorchSimIntegrationMixin,
+    LAMMPSMLIAPIntegrationMixin,
+):
     @pytest.fixture
     def strict_locality(self):
         return True
 
     @pytest.fixture(scope="class")
-    def nequip_compile_tol(self, model_dtype):
+    def ase_integration_tol(self, model_dtype):
         return {"float32": 5e-5, "float64": 1e-10}[model_dtype]
 
     @pytest.fixture(
@@ -127,8 +135,8 @@ class TestAllegro(TorchSimIntegrationMixin, LAMMPSMLIAPIntegrationMixin):
             else []
         ),
     )
-    def nequip_compile_acceleration_modifiers(self, request):
-        """Test acceleration modifiers in nequip-compile workflows."""
+    def ase_compile_modifiers(self, request):
+        """Test acceleration modifiers in ASE integration compile workflows."""
         if request.param is None:
             return None
 
@@ -164,18 +172,55 @@ class TestAllegro(TorchSimIntegrationMixin, LAMMPSMLIAPIntegrationMixin):
     @pytest.fixture(
         scope="class",
         params=[None]
+        + (["enable_TritonContracter"] if _TORCH_GE_2_6 and _TRITON_INSTALLED else [])
         + (
             ["enable_CuEquivarianceContracter"]
             if _TORCH_GE_2_6 and _CUEQ_INSTALLED
             else []
         ),
     )
-    def train_time_compile_acceleration_modifiers(self, request):
+    def torchsim_compile_modifiers(self, request):
+        """Test acceleration modifiers in torch-sim compile workflows."""
+        if request.param is None:
+            return None
+
+        def modifier_handler(mode, device, model_dtype):
+            if request.param == "enable_TritonContracter":
+                if mode == "torchscript":
+                    pytest.skip(
+                        "TritonContracter tests skipped for TorchScript compilation mode"
+                    )
+                if device == "cpu":
+                    pytest.skip("TritonContracter tests skipped for CPU")
+                return ["enable_TritonContracter"]
+            elif request.param == "enable_CuEquivarianceContracter":
+                if device == "cpu":
+                    pytest.skip("CuEquivarianceContracter tests skipped for CPU")
+                if mode == "aotinductor" and model_dtype == "float64":
+                    pytest.skip(
+                        "CuEquivarianceContracter tests skipped for AOTI and float64 due to known issue"
+                    )
+                return ["enable_CuEquivarianceContracter"]
+            else:
+                raise ValueError(f"Unknown modifier: {request.param}")
+
+        return modifier_handler
+
+    @pytest.fixture(
+        scope="class",
+        params=[None]
+        + (
+            ["enable_CuEquivarianceContracter"]
+            if _TORCH_GE_2_6 and _CUEQ_INSTALLED
+            else []
+        ),
+    )
+    def train_time_compile_modifiers(self, request):
         """Test acceleration modifiers in train-time compile workflows."""
         if request.param is None:
             return None
 
-        def modifier_handler(device):
+        def modifier_handler(device, model_dtype):
             if request.param == "enable_CuEquivarianceContracter":
                 if device == "cpu":
                     pytest.skip("CuEquivarianceContracter tests skipped for CPU")
@@ -209,11 +254,13 @@ class TestAllegro(TorchSimIntegrationMixin, LAMMPSMLIAPIntegrationMixin):
         reason="TritonContracter requires torch >= 2.6 and triton",
     )
     def test_triton_contracter_consistency(
-        self, model, model_test_data, device, nequip_compile_tol
+        self, model, model_test_data, device, model_dtype
     ):
         """Test that TritonContracter-enabled model produces consistent results with original model."""
         if device == "cpu":
             pytest.skip("TritonContracter tests skipped for CPU")
+
+        tol = {"float32": 5e-5, "float64": 1e-10}[model_dtype]
 
         original_model, config, _ = model
 
@@ -236,8 +283,8 @@ class TestAllegro(TorchSimIntegrationMixin, LAMMPSMLIAPIntegrationMixin):
                 assert torch.allclose(
                     original_output[key],
                     triton_output[key],
-                    rtol=nequip_compile_tol,
-                    atol=nequip_compile_tol,
+                    rtol=tol,
+                    atol=tol,
                 ), (
                     f"Outputs differ for key {key}: max diff = {torch.max(torch.abs(original_output[key] - triton_output[key])).item()}"
                 )
@@ -254,11 +301,13 @@ class TestAllegro(TorchSimIntegrationMixin, LAMMPSMLIAPIntegrationMixin):
         )
     )
     def test_cuequivariance_contracter_consistency(
-        self, model, model_test_data, device, nequip_compile_tol
+        self, model, model_test_data, device, model_dtype
     ):
         """Test that CuEquivarianceContracter-enabled model produces consistent results with original model."""
         if device == "cpu":
             pytest.skip("CuEquivarianceContracter tests skipped for CPU")
+
+        tol = {"float32": 5e-5, "float64": 1e-10}[model_dtype]
 
         original_model, config, _ = model
 
@@ -273,6 +322,4 @@ class TestAllegro(TorchSimIntegrationMixin, LAMMPSMLIAPIntegrationMixin):
         cueq_model.load_state_dict(original_model.state_dict())
 
         # test
-        self.compare_output_and_gradients(
-            original_model, cueq_model, model_test_data, nequip_compile_tol
-        )
+        compare_output_and_gradients(original_model, cueq_model, model_test_data, tol)
