@@ -3,4 +3,4 @@
 # See Python packaging guide
 # https://packaging.python.org/guides/single-sourcing-package-version/
 
-__version__ = "0.8.1"
+__version__ = "0.8.2"

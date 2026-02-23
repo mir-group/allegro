@@ -9,6 +9,11 @@ Most recent change on the bottom.
 
 ## [Unreleased]
 
+## [0.8.2]
+
+### Changed
+- minor changes to TritonContracter
+- minimum `nequip` version is v0.17.0
 
 ## [0.8.1]
 
