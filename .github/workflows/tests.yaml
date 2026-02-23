@@ -33,7 +33,7 @@ jobs:
 
   tests:
     needs: lint
-    runs-on: ${{ github.event.repository.private == true && 'self-hosted' || 'ubuntu-latest' }}
+    runs-on: ${{ github.event.repository.private && 'self-hosted' || 'ubuntu-latest' }}
     strategy:
       matrix:
         torch-version: [2.2.0, "2.*"]
