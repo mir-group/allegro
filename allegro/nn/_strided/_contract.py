@@ -3,7 +3,7 @@ import math
 import torch
 from e3nn.o3._irreps import Irreps
 from e3nn.o3._wigner import wigner_3j
-from nequip.nn import scatter, replace_submodules, model_modifier
+from nequip.nn import replace_submodules, model_modifier
 from nequip.utils.dtype import torch_default_dtype
 from typing import List, Tuple, Optional
 
@@ -187,24 +187,12 @@ class Contracter(torch.nn.Module):
         x1: torch.Tensor,
         x2: torch.Tensor,
         idxs: torch.Tensor,
-        scatter_dim_size: int,
-        scatter_norm: torch.Tensor,
     ) -> torch.Tensor:
-        # scatter and index select
-        x2_scatter = scatter(
-            x2,
-            idxs,
-            dim=0,
-            dim_size=scatter_dim_size,
-        )
-        # normalization
-        x2_scatter = x2_scatter * scatter_norm
-
         # === perform TP ===
         # convert to strided shape
         x1 = x1.reshape(-1, self.mul, self.base_dim1)
-        x2_scatter = x2_scatter.reshape(-1, self.mul, self.base_dim2)
-        return self._contract_conv(x1, x2_scatter, idxs)
+        x2 = x2.reshape(-1, self.mul, self.base_dim2)
+        return self._contract_conv(x1, x2, idxs)
 
     def _contract_conv(
         self, x1: torch.Tensor, x2: torch.Tensor, idxs: torch.Tensor

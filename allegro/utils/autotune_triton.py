@@ -86,13 +86,11 @@ CHALLENGING_CONFIGS = [
 ]
 
 
-def benchmark_forward(
-    contracter, input1, input2, scatter_idxs, num_atoms, warmup=3, n_iter=10
-):
+def benchmark_forward(contracter, input1, input2, scatter_idxs, warmup=3, n_iter=10):
     """Benchmark forward pass."""
     # warmup
     for _ in range(warmup):
-        _ = contracter(input1, input2, scatter_idxs, num_atoms)
+        _ = contracter(input1, input2, scatter_idxs)
         torch.cuda.synchronize()
 
     # benchmark
@@ -101,7 +99,7 @@ def benchmark_forward(
 
     start_event.record()
     for _ in range(n_iter):
-        _ = contracter(input1, input2, scatter_idxs, num_atoms)
+        _ = contracter(input1, input2, scatter_idxs)
     end_event.record()
 
     torch.cuda.synchronize()
@@ -110,9 +108,7 @@ def benchmark_forward(
     return total_time_ms / n_iter
 
 
-def benchmark_backward(
-    contracter, input1, input2, scatter_idxs, num_atoms, warmup=3, n_iter=10
-):
+def benchmark_backward(contracter, input1, input2, scatter_idxs, warmup=3, n_iter=10):
     """Benchmark full forward+backward pass.
 
     Returns:
@@ -122,7 +118,7 @@ def benchmark_backward(
     for _ in range(warmup):
         input1.grad = None
         input2.grad = None
-        out = contracter(input1, input2, scatter_idxs, num_atoms)
+        out = contracter(input1, input2, scatter_idxs)
         grad_out = torch.randn_like(out)
         out.backward(grad_out)
         torch.cuda.synchronize()
@@ -135,7 +131,7 @@ def benchmark_backward(
     for _ in range(n_iter):
         input1.grad = None
         input2.grad = None
-        out = contracter(input1, input2, scatter_idxs, num_atoms)
+        out = contracter(input1, input2, scatter_idxs)
         grad_out = torch.randn_like(out)
         out.backward(grad_out)
     end_event.record()
@@ -188,7 +184,6 @@ def autotune(
     num_nodes = AtomicDataDict.num_nodes(data)
     num_edges = AtomicDataDict.num_edges(data)
     scatter_idxs = data[AtomicDataDict.EDGE_INDEX_KEY][1]
-    num_atoms_tensor = torch.tensor([num_nodes], dtype=torch.int64, device=device)
 
     print(f"  num_nodes: {num_nodes}")
     print(f"  num_edges: {num_edges}")
@@ -206,9 +201,9 @@ def autotune(
         irreps_in2 = model_config["irreps_in2"]
         mul = model_config["mul"]
 
-        # both inputs are edge-indexed, enable grad for backward
+        # input1 is edge-indexed, input2 is node-indexed
         input1 = irreps_in1.randn(num_edges, mul, -1, dtype=dtype, device=device)
-        input2 = irreps_in2.randn(num_edges, mul, -1, dtype=dtype, device=device)
+        input2 = irreps_in2.randn(num_nodes, mul, -1, dtype=dtype, device=device)
         input1.requires_grad_(True)
         input2.requires_grad_(True)
 
@@ -237,7 +232,6 @@ def autotune(
                 input1,
                 input2,
                 scatter_idxs,
-                num_atoms_tensor,
                 warmup=5,
                 n_iter=20,
             )
@@ -247,7 +241,6 @@ def autotune(
                 input1,
                 input2,
                 scatter_idxs,
-                num_atoms_tensor,
                 warmup=5,
                 n_iter=20,
             )
@@ -285,7 +278,6 @@ def autotune(
                     input1,
                     input2,
                     scatter_idxs,
-                    num_atoms_tensor,
                     warmup=5,
                     n_iter=20,
                 )
@@ -295,7 +287,6 @@ def autotune(
                     input1,
                     input2,
                     scatter_idxs,
-                    num_atoms_tensor,
                     warmup=5,
                     n_iter=20,
                 )

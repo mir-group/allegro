@@ -13,6 +13,7 @@ from nequip.nn import (
     ScalarMLPFunction,
     tp_path_exists,
     AvgNumNeighborsNorm,
+    scatter,
 )
 
 from ._strided import Contracter, MakeWeightedChannels
@@ -258,18 +259,36 @@ class Allegro_Module(GraphModuleMixin, torch.nn.Module):
             projection, -1, self.num_scalar_features, self._env_weighter.weight_numel
         )
 
-        # Get normalization tensor
-        scatter_norm = self.avg_num_neighbors_norm(data)[:num_atoms].unsqueeze(-1)
-
         layer_index: int = 0
         for latent, tp in zip(self.latents, self.tps):
-            # === Env Weight & TP ===
+            # === construct env weighted tensor ===
             env_w_edges = self._env_weighter(tensor_basis, env_w)
-            # scatter env_w_edges and TP with tensor_features
-            # second input irreps is the one that is scattered
+
+            # scatter env_w_edges to nodes and normalize
+            env_w_scatter = scatter(
+                env_w_edges,
+                edge_center,
+                dim=0,
+                dim_size=num_atoms,
+            )
+            env_w_scatter_size0 = env_w_scatter.size(0)
+            env_w_scatter_size1 = env_w_scatter.size(1)
+            env_w_scatter_size2 = env_w_scatter.size(2)
+            data[AtomicDataDict.NODE_FEATURES_KEY] = env_w_scatter.view(
+                env_w_scatter_size0,
+                env_w_scatter_size1 * env_w_scatter_size2,
+            )
+            data = self.avg_num_neighbors_norm(data)
+
+            # === TP ===
+            # second input irreps is node-scattered env features
             irin1 = tensor_features
-            irin2 = env_w_edges
-            tensor_features = tp(irin1, irin2, edge_center, num_atoms, scatter_norm)
+            irin2 = data[AtomicDataDict.NODE_FEATURES_KEY].view(
+                env_w_scatter_size0,
+                env_w_scatter_size1,
+                env_w_scatter_size2,
+            )
+            tensor_features = tp(irin1, irin2, edge_center)
 
             # Extract invariants from tensor track
             # features has shape [z][mul][k], where scalars are first

@@ -1,7 +1,6 @@
 # This file is a part of the `allegro` package. Please see LICENSE and README at the root for information on using it.
 import torch
 
-from nequip.nn import scatter
 from ._contract import Contracter
 
 import itertools
@@ -87,20 +86,12 @@ class CuEquivarianceContracter(Contracter):
         x1: torch.Tensor,
         x2: torch.Tensor,
         idxs: torch.Tensor,
-        scatter_dim_size: int,
-        scatter_norm: torch.Tensor,
     ) -> torch.Tensor:
         # NOTE: the reason for some duplicated code is because TorchScript doesn't support super() calls
         # see https://github.com/pytorch/pytorch/issues/42885
 
-        x2_scatter = scatter(
-            x2,
-            idxs,
-            dim=0,
-            dim_size=scatter_dim_size,
-        )
-
-        x2_scatter = x2_scatter * scatter_norm
+        x1 = x1.reshape(-1, self.mul, self.base_dim1)
+        x2 = x2.reshape(-1, self.mul, self.base_dim2)
 
         if x1.is_cuda and self.num_paths >= 1:
             empty_dict: Dict[int, torch.Tensor] = {}  # for torchscript
@@ -120,10 +111,10 @@ class CuEquivarianceContracter(Contracter):
                     .view(
                         x1.size(0), self.base_dim1 * self.mul
                     ),  # (edges, irreps * mul)
-                    x2_scatter.transpose(1, 2)
+                    x2.transpose(1, 2)
                     .contiguous()
                     .view(
-                        scatter_dim_size, self.base_dim2 * self.mul
+                        x2.size(0), self.base_dim2 * self.mul
                     ),  # (atoms, irreps * mul)
                 ],
                 {2: idxs},  # input indices
@@ -138,4 +129,4 @@ class CuEquivarianceContracter(Contracter):
                 .contiguous()
             )
         else:
-            return self._contract_conv(x1, x2_scatter, idxs)
+            return self._contract_conv(x1, x2, idxs)

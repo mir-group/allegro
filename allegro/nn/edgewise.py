@@ -53,8 +53,9 @@ class EdgewiseReduce(GraphModuleMixin, torch.nn.Module):
             reduce=self.reduce,
         )
         # === scale ===
-        factor = self.norm_module(data)[: AtomicDataDict.num_nodes(data)]
-        out = out * (factor / sqrt(2))
+        data[AtomicDataDict.NODE_FEATURES_KEY] = out
+        data = self.norm_module(data)
+        out = data[AtomicDataDict.NODE_FEATURES_KEY] / sqrt(2)
         # ^ factor of 2 to normalize dE/dr_i which includes both contributions from dE/dr_ij
         # and every other derivative against r_ji.
 
