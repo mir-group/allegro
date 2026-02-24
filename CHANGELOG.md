@@ -11,6 +11,9 @@ Most recent change on the bottom.
 
 ## [0.8.2]
 
+### Added
+- per-type average number of neighbors normalization option
+
 ### Changed
 - minor changes to TritonContracter
 - minimum `nequip` version is v0.17.0
