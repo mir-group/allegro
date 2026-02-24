@@ -2,7 +2,7 @@
 run: [train, test]
 
 cutoff_radius: 5.0
-model_type_names: [C, H, O, Cu]
+model_type_names: [C, H, O]
 chemical_species: ${model_type_names}
 
 data:
@@ -139,7 +139,7 @@ training_module:
 
     # === misc hyperparameters ===
     # average number of neighbors for edge sum normalization
-    avg_num_neighbors: ${training_data_stats:num_neighbors_mean}
+    avg_num_neighbors: ${training_data_stats:per_type_num_neighbors_mean}
 
     # per-type per-atom scales and shifts
     per_type_energy_shifts: ${training_data_stats:per_atom_energy_mean}

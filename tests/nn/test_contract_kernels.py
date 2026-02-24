@@ -97,16 +97,15 @@ def test_contract_kernel(
         )
         args_in = (
             irreps_in1.randn(num_edges, mul, -1, device=device),
-            irreps_in2.randn(num_edges, mul, -1, device=device),
+            irreps_in2.randn(num_atoms, mul, -1, device=device),
             scatter_idxs,
-            torch.tensor([num_atoms], dtype=torch.int64, device=device),
         )
 
         for c in (c_base, c_kernel):
             assert_equivariant(
                 c,
                 args_in=args_in,
-                irreps_in=[irreps_in1, irreps_in2, None, None],
+                irreps_in=[irreps_in1, irreps_in2, None],
                 irreps_out=irreps_out,
                 # e3nn uses 1e-3, 1e-9
                 tolerance={torch.float32: 1e-3, torch.float64: 1e-8}[

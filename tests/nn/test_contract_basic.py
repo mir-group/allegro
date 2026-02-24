@@ -57,31 +57,23 @@ def test_contract_jit(
             c_opt_mod.weights.copy_(c_base.weights)
         c_opt_mod = torch.jit.script(c_opt_mod)
 
-        def c_opt(x, y, idx, dim, w=None):
-            args = (x, y, idx, dim, w)
-            if w is None:
-                args = args[:-1]
-            return c_opt_mod(*args)
+        def c_opt(x, y, idx):
+            return c_opt_mod(x, y, idx)
 
-        batchdim = 17
-        scatter_dim = torch.tensor([batchdim], dtype=torch.long, device=device)
-        scatter_idxs = torch.arange(batchdim, device=device)
+        num_edges = 17
+        num_nodes = 11
+        scatter_idxs = torch.randint(0, num_nodes, (num_edges,), device=device)
         args_in = (
-            irreps_in1.randn(batchdim, mul, -1, device=device),
-            irreps_in2.randn(batchdim, mul, -1, device=device),
+            irreps_in1.randn(num_edges, mul, -1, device=device),
+            irreps_in2.randn(num_nodes, mul, -1, device=device),
             scatter_idxs,
-            scatter_dim,
-            torch.randn(
-                tuple(batchdim if e == -1 else e for e in c_base.weights.shape)
-            ),
         )
-        args_in = args_in[:-1]
 
         for c in (c_base, c_opt):
             assert_equivariant(
                 c,
                 args_in=args_in,
-                irreps_in=[irreps_in1, irreps_in2, None, None],
+                irreps_in=[irreps_in1, irreps_in2, None],
                 irreps_out=irreps_out,
                 # e3nn uses 1e-3, 1e-9
                 tolerance={torch.float32: 1e-3, torch.float64: 1e-8}[
@@ -164,7 +156,6 @@ def test_like_tp(
         # make input data
         batchdim = 1
         scatter_idxs = torch.arange(batchdim, device=device)
-        scatter_dim = torch.tensor([batchdim], dtype=torch.long, device=device)
         tensor1 = torch.randn(batchdim, mul, c.base_dim1, device=device)
         tensor2 = torch.randn(batchdim, mul, c.base_dim2, device=device)
 
@@ -193,9 +184,7 @@ def test_like_tp(
             weights_tp = weights_tp.T
         # else weights are just (u,)
         weights_tp = weights_tp.reshape(-1)
-        c_out = _strided_to_cat(
-            irreps_out, mul, c(tensor1, tensor2, scatter_idxs, scatter_dim)
-        )
+        c_out = _strided_to_cat(irreps_out, mul, c(tensor1, tensor2, scatter_idxs))
         tp_out = tp(
             _strided_to_cat(irreps_in1, mul, tensor1),
             _strided_to_cat(irreps_in2, mul, tensor2),
