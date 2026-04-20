@@ -16,11 +16,16 @@ TORCH_TRITON_DTYPE_MAPPER = {
     torch.float16: tl.float16,
 }
 
-# we hide everything under `torch.cuda.is_available` condition to allow `nequip-package` to pick this file up
+# we hide everything under `torch.cuda.is_available`/`torch.xpu.is_available` condition to allow `nequip-package` to pick this file up
 # since `nequip-package` ignores files if it errors on loading the file
 # in this case, an error will be thrown if we hit @triton.autotune when there are no GPUs
 
-if torch.cuda.is_available():
+
+def _accelerator_available(accelerator: str) -> bool:
+    return hasattr(torch, accelerator) and getattr(torch, accelerator).is_available()
+
+
+if _accelerator_available("cuda") or _accelerator_available("xpu"):
 
     @triton.autotune(
         configs=[
@@ -767,7 +772,7 @@ class TritonContracter(Contracter):
 
     def _contract_conv(self, x1, x2, idxs):
         # runtime conditions for triggering kernel code path
-        if x1.is_cuda and not self.training:
+        if (x1.is_cuda or x1.is_xpu) and not self.training:
             return torch.ops.triton.flashallegro_forward(
                 x1,
                 x2,
