@@ -9,6 +9,15 @@ Most recent change on the bottom.
 
 ## [Unreleased]
 
+## [0.8.3]
+
+### Added
+- Muon optimizer compatibility
+- XPU compatibility with TritonContracter
+
+### Changed
+- minimum `nequip` version is v0.18.0
+
 ## [0.8.2]
 
 ### Added
