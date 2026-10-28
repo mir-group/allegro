@@ -15,7 +15,7 @@ from allegro.nn._strided import Contracter
 @pytest.mark.parametrize("mul", [3, 8])
 @pytest.mark.parametrize("dtype", ["float32", "float64"])
 @pytest.mark.parametrize(
-    "device", ["cpu"] + ["cuda"] if torch.cuda.is_available() else []
+    "device", ["cpu"] + (["cuda"] if torch.cuda.is_available() else [])
 )
 def test_contract_jit(
     irreps_in1,
@@ -116,7 +116,7 @@ def _strided_to_cat(irreps, mul, x):
 @pytest.mark.parametrize("irrep_normalization", [None, "component"])
 @pytest.mark.parametrize("dtype", ["float32", "float64"])
 @pytest.mark.parametrize(
-    "device", ["cpu"] + ["cuda"] if torch.cuda.is_available() else []
+    "device", ["cpu"] + (["cuda"] if torch.cuda.is_available() else [])
 )
 def test_like_tp(
     irreps_in1,
