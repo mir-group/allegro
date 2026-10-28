@@ -222,7 +222,7 @@ class Contracter(torch.nn.Module):
             outer = x1.unsqueeze(-1) * x2.unsqueeze(-2)
             if self.path_channel_coupling:
                 # zuij, uijk -> zuk
-                out = torch.sum(outer.unsqueeze(-1) * ww3j, (2, 3))
+                out = torch.einsum("zuij,uijk->zuk", outer, ww3j)
             else:
                 # (zu)(ij), (ij)k -> (zu)k -> zuk
                 out = torch.mm(
