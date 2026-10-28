@@ -9,6 +9,9 @@ Most recent change on the bottom.
 
 ## [Unreleased]
 
+### Changed
+- `Contracter` uses `torch.einsum` instead of materializing an `[edges, channels, i, j, k]` tensor when not using the Triton/CuEquivariance kernels: faster, and less memory outside AOTInductor
+
 ## [0.8.3]
 
 ### Added
