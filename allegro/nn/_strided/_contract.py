@@ -221,8 +221,17 @@ class Contracter(torch.nn.Module):
             # zui, zuj -> zuij
             outer = x1.unsqueeze(-1) * x2.unsqueeze(-2)
             if self.path_channel_coupling:
-                # zuij, uijk -> zuk
-                out = torch.einsum("zuij,uijk->zuk", outer, ww3j)
+                # zuij, uijk -> zuk, as a matmul batched over channels u:
+                # u[z(ij)] @ u[(ij)k] -> u[zk] -> zuk (transposed view)
+                # avoids materializing a [z, u, i, j, k] tensor
+                out = torch.bmm(
+                    outer.view(
+                        outer.size(0), self.mul, self.base_dim1 * self.base_dim2
+                    ).transpose(0, 1),
+                    ww3j.view(
+                        self.mul, self.base_dim1 * self.base_dim2, self.base_dim_out
+                    ),
+                ).transpose(0, 1)
             else:
                 # (zu)(ij), (ij)k -> (zu)k -> zuk
                 out = torch.mm(
