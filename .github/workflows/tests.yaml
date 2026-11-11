@@ -36,7 +36,7 @@ jobs:
     runs-on: ${{ github.event.repository.private && 'self-hosted' || 'ubuntu-latest' }}
     strategy:
       matrix:
-        torch-version: [2.2.0, 2.10.0]
+        torch-version: [2.3.0, 2.10.*]
     container:
       image: nvidia/cuda:12.6.1-cudnn-devel-ubuntu24.04
       options: ${{ github.event.repository.private && '--gpus all' || ' ' }}
@@ -80,16 +80,12 @@ jobs:
       - name: Install Test Dependencies
         run: |
           pip install setuptools wheel pytest pytest-xdist[psutil]
-          # Pin numpy<2 and matscipy 1.1.1 for torch 2.2 to avoid compatibility issues
-          if [ "${{ matrix.torch-version }}" = "2.2.0" ]; then
-            pip install "numpy<2" "matscipy==1.1.1"
-          fi
           # install nequip packages
           pip install --upgrade-strategy only-if-needed ./nequip
           pip install --upgrade-strategy only-if-needed .
           if python3 -c "import torch; exit(0 if torch.cuda.is_available() else 1)"; then
             echo "Installing CuEquivariance (CUDA available)"
-            pip install cuequivariance-torch cuequivariance-ops-torch-cu12
+            pip install cuequivariance-torch==0.10.0 cuequivariance-ops-torch-cu12==0.10.0
           else
             echo "Skipping CuEquivariance installation (CUDA not available)"
           fi
