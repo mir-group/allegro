@@ -92,7 +92,7 @@ jobs:
       - name: Run tests
         run: |
           # See https://github.com/pytest-dev/pytest/issues/1075 for why we need to set PYTHONHASHSEED
-          PYTHONHASHSEED=0 pytest -n auto tests/
+          PYTHONHASHSEED=0 pytest -xv -rs -n auto tests/
       - name: Clean up temporary files
         if: always()
         run: |
