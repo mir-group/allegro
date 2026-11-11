@@ -79,14 +79,16 @@ class TestAllegro(
         return True
 
     @pytest.fixture(scope="class")
-    def ase_integration_tol(self, model_dtype):
+    @classmethod
+    def ase_integration_tol(cls, model_dtype):
         return {"float32": 5e-5, "float64": 1e-10}[model_dtype]
 
     @pytest.fixture(
         params=[BESSEL_CONFIG, SPLINE_CONFIG],
         scope="class",
     )
-    def scalar_embed_config(self, request):
+    @classmethod
+    def scalar_embed_config(cls, request):
         return request.param
 
     @pytest.fixture(
@@ -94,14 +96,16 @@ class TestAllegro(
         params=[True],  # False
         scope="class",
     )
-    def parity(self, request):
+    @classmethod
+    def parity(cls, request):
         return request.param
 
     @pytest.fixture(
         params=[True, False],
         scope="class",
     )
-    def tp_path_channel_coupling(self, request):
+    @classmethod
+    def tp_path_channel_coupling(cls, request):
         return request.param
 
     @pytest.fixture(
@@ -111,8 +115,9 @@ class TestAllegro(
         ],
         scope="class",
     )
+    @classmethod
     def config(
-        self,
+        cls,
         request,
         scalar_embed_config,
         parity,
@@ -135,7 +140,8 @@ class TestAllegro(
             else []
         ),
     )
-    def ase_compile_modifiers(self, request):
+    @classmethod
+    def ase_compile_modifiers(cls, request):
         """Test acceleration modifiers in ASE integration compile workflows."""
         if request.param is None:
             return None
@@ -179,7 +185,8 @@ class TestAllegro(
             else []
         ),
     )
-    def torchsim_compile_modifiers(self, request):
+    @classmethod
+    def torchsim_compile_modifiers(cls, request):
         """Test acceleration modifiers in torch-sim compile workflows."""
         if request.param is None:
             return None
@@ -215,7 +222,8 @@ class TestAllegro(
             else []
         ),
     )
-    def train_time_compile_modifiers(self, request):
+    @classmethod
+    def train_time_compile_modifiers(cls, request):
         """Test acceleration modifiers in train-time compile workflows."""
         if request.param is None:
             return None
@@ -241,7 +249,8 @@ class TestAllegro(
             else []
         ),
     )
-    def mliap_acceleration_modifiers(self, request):
+    @classmethod
+    def mliap_acceleration_modifiers(cls, request):
         """Test acceleration modifiers in MLIAP workflows."""
 
         def modifier_handler(compile, model_dtype):
