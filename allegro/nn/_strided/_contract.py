@@ -248,7 +248,9 @@ class Contracter(torch.nn.Module):
     def enable_TritonContracter(cls, model):
         """Enable custom Triton tensor product kernel for accelerated Allegro inference.
 
-        NOTE that this modifier should only be used during ``nequip-compile --mode aotinductor``.
+        The kernel is only used on GPUs, in eval mode; in training mode, the standard
+        contraction is used. For compiled models, use this modifier with
+        ``nequip-compile --mode aotinductor``.
         """
 
         from ._flashallegro import TritonContracter
